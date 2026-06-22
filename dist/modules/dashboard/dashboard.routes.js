@@ -1,0 +1,23 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const dashboard_controller_js_1 = require("./dashboard.controller.js");
+const validate_js_1 = require("../../middleware/validate.js");
+const dashboard_schema_js_1 = require("./dashboard.schema.js");
+const auth_js_1 = require("../../middleware/auth.js");
+const storeAccess_js_1 = require("../../middleware/storeAccess.js");
+const router = (0, express_1.Router)();
+router.use(auth_js_1.authMiddleware);
+router.use(storeAccess_js_1.storeAccessMiddleware);
+router.get('/kpi', (0, validate_js_1.validate)(dashboard_schema_js_1.dashboardQuerySchema, 'query'), dashboard_controller_js_1.dashboardController.getKPIs);
+router.get('/sales-dynamic', (0, validate_js_1.validate)(dashboard_schema_js_1.dashboardQuerySchema, 'query'), dashboard_controller_js_1.dashboardController.getSalesDynamic);
+router.get('/stores-comparison', (0, validate_js_1.validate)(dashboard_schema_js_1.dashboardQuerySchema, 'query'), dashboard_controller_js_1.dashboardController.getStoresComparison);
+router.get('/top-products', (0, validate_js_1.validate)(dashboard_schema_js_1.topProductsQuerySchema, 'query'), dashboard_controller_js_1.dashboardController.getTopProducts);
+router.get('/abc-analysis', (0, validate_js_1.validate)(dashboard_schema_js_1.abcAnalysisQuerySchema, 'query'), dashboard_controller_js_1.dashboardController.getAbcAnalysis);
+router.get('/expense-breakdown', (0, validate_js_1.validate)(dashboard_schema_js_1.dashboardQuerySchema, 'query'), dashboard_controller_js_1.dashboardController.getExpenseBreakdown);
+router.get('/inventory-summary', (0, validate_js_1.validate)(dashboard_schema_js_1.dashboardQuerySchema, 'query'), dashboard_controller_js_1.dashboardController.getInventorySummary);
+router.get('/no-movement-products', (0, validate_js_1.validate)(dashboard_schema_js_1.dashboardQuerySchema, 'query'), dashboard_controller_js_1.dashboardController.getNoMovementProducts);
+router.get('/low-stock-products', (0, validate_js_1.validate)(dashboard_schema_js_1.dashboardQuerySchema, 'query'), dashboard_controller_js_1.dashboardController.getLowStockProducts);
+router.get('/inventory-turnover', (0, validate_js_1.validate)(dashboard_schema_js_1.dashboardQuerySchema, 'query'), dashboard_controller_js_1.dashboardController.getInventoryTurnover);
+exports.default = router;
+//# sourceMappingURL=dashboard.routes.js.map
