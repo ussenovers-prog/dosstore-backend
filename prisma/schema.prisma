@@ -1,0 +1,280 @@
+// ============================================================
+// Clothing Store Analytics — MVP
+// Prisma Schema (PostgreSQL for production)
+// ============================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// STORES
+// ============================================================
+
+model Store {
+  id        Int      @id @default(autoincrement())
+  name      String
+  code      String   @unique
+  address   String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users       User[]
+  products    Product[]
+  sales       Sale[]
+  arrivals    Arrival[]
+  inventory   Inventory[]
+  grossProfit GrossProfit[]
+  expenses    Expense[]
+  visitors    Visitor[]
+  importLogs  ImportLog[]
+
+  @@map("stores")
+}
+
+// ============================================================
+// USERS
+// ============================================================
+
+model User {
+  id           Int      @id @default(autoincrement())
+  email        String   @unique
+  passwordHash String
+  fullName     String
+  role         String   @default("employee") // owner | employee
+  storeId      Int?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  store    Store?    @relation(fields: [storeId], references: [id], onDelete: SetNull)
+  expenses Expense[]
+  visitors Visitor[]
+
+  @@index([role])
+  @@index([storeId])
+  @@map("users")
+}
+
+// ============================================================
+// PRODUCT CATEGORIES
+// ============================================================
+
+model ProductCategory {
+  id        Int      @id @default(autoincrement())
+  name      String
+  parentId  Int?
+  createdAt DateTime @default(now())
+
+  parent   ProductCategory?  @relation("CategoryTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children ProductCategory[] @relation("CategoryTree")
+  products Product[]
+
+  @@index([parentId])
+  @@map("product_categories")
+}
+
+// ============================================================
+// PRODUCTS
+// ============================================================
+
+model Product {
+  id            Int      @id @default(autoincrement())
+  storeId       Int
+  beksarId      String?
+  name          String
+  article       String?
+  barcode       String?
+  categoryId    Int?
+  brand         String?
+  size          String?
+  color         String?
+  purchasePrice Float?
+  retailPrice   Float?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  store     Store            @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  category  ProductCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  sales     Sale[]
+  arrivals  Arrival[]
+  inventory Inventory[]
+
+  @@unique([storeId, beksarId])
+  @@index([storeId])
+  @@index([barcode])
+  @@index([categoryId])
+  @@map("products")
+}
+
+// ============================================================
+// SALES
+// ============================================================
+
+model Sale {
+  id          Int      @id @default(autoincrement())
+  storeId     Int
+  productId   Int
+  beksarDocId String
+  saleDate    DateTime
+  quantity    Int
+  unitPrice   Float
+  totalAmount Float
+  discount    Float    @default(0)
+  paymentType String?
+  createdAt   DateTime @default(now())
+
+  store   Store   @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, beksarDocId, productId])
+  @@index([storeId, saleDate])
+  @@index([productId])
+  @@map("sales")
+}
+
+// ============================================================
+// ARRIVALS
+// ============================================================
+
+model Arrival {
+  id          Int      @id @default(autoincrement())
+  storeId     Int
+  productId   Int
+  beksarDocId String
+  arrivalDate DateTime
+  quantity    Int
+  unitCost    Float
+  totalCost   Float
+  supplier    String?
+  createdAt   DateTime @default(now())
+
+  store   Store   @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, beksarDocId, productId])
+  @@index([storeId, arrivalDate])
+  @@index([productId])
+  @@map("arrivals")
+}
+
+// ============================================================
+// INVENTORY
+// ============================================================
+
+model Inventory {
+  id           Int      @id @default(autoincrement())
+  storeId      Int
+  productId    Int
+  snapshotDate DateTime
+  quantity     Int
+  totalValue   Float
+  createdAt    DateTime @default(now())
+
+  store   Store   @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, productId, snapshotDate])
+  @@index([storeId, snapshotDate])
+  @@index([productId])
+  @@map("inventory")
+}
+
+// ============================================================
+// GROSS PROFIT
+// ============================================================
+
+model GrossProfit {
+  id          Int      @id @default(autoincrement())
+  storeId     Int
+  periodDate  DateTime
+  revenue     Float    @default(0)
+  costOfGoods Float    @default(0)
+  grossProfit Float    @default(0)
+  createdAt   DateTime @default(now())
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, periodDate])
+  @@index([storeId, periodDate])
+  @@map("gross_profit")
+}
+
+// ============================================================
+// EXPENSES
+// ============================================================
+
+model Expense {
+  id           Int      @id @default(autoincrement())
+  storeId      Int
+  category     String   // salary | rent | utilities | target_ads | other
+  expenseDate  DateTime
+  amount       Float    @default(0)
+  description  String?
+  isRecurring  Boolean  @default(false)
+  source       String?
+  campaignName String?
+  channel      String?
+  createdBy    Int?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  store   Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  creator User? @relation(fields: [createdBy], references: [id], onDelete: SetNull)
+
+  @@index([storeId, expenseDate])
+  @@index([category])
+  @@index([isRecurring])
+  @@map("expenses")
+}
+
+// ============================================================
+// VISITORS
+// ============================================================
+
+model Visitor {
+  id          Int      @id @default(autoincrement())
+  storeId     Int
+  visitDate   DateTime
+  count       Int      @map("visitors_count")
+  buyersCount Int      @default(0) @map("buyers_count")
+  enteredBy   Int?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  store   Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  enterer User? @relation(fields: [enteredBy], references: [id], onDelete: SetNull)
+
+  @@unique([storeId, visitDate])
+  @@index([storeId, visitDate])
+  @@map("visitors")
+}
+
+// ============================================================
+// IMPORT LOG
+// ============================================================
+
+model ImportLog {
+  id               Int      @id @default(autoincrement())
+  sourceType       String   // ftp_beksar_sales | ftp_beksar_arrival | etc.
+  storeId          Int?
+  fileName         String
+  status           String   @default("success") // success | error | partial
+  recordsProcessed Int      @default(0)
+  recordsFailed    Int      @default(0)
+  errorMessage     String?
+  importedAt       DateTime @default(now())
+
+  store Store? @relation(fields: [storeId], references: [id], onDelete: SetNull)
+
+  @@index([sourceType])
+  @@index([importedAt])
+  @@index([storeId])
+  @@map("import_log")
+}

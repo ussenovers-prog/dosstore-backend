@@ -1,0 +1,20 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const expenses_controller_js_1 = require("./expenses.controller.js");
+const validate_js_1 = require("../../middleware/validate.js");
+const expenses_schema_js_1 = require("./expenses.schema.js");
+const auth_js_1 = require("../../middleware/auth.js");
+const roles_js_1 = require("../../middleware/roles.js");
+const storeAccess_js_1 = require("../../middleware/storeAccess.js");
+const router = (0, express_1.Router)();
+router.use(auth_js_1.authMiddleware);
+router.use(storeAccess_js_1.storeAccessMiddleware);
+router.use(roles_js_1.requireEmployeeOrOwner);
+router.get('/', (0, validate_js_1.validate)(expenses_schema_js_1.expenseQuerySchema, 'query'), expenses_controller_js_1.expensesController.list);
+router.get('/:id', expenses_controller_js_1.expensesController.getById);
+router.post('/', (0, validate_js_1.validate)(expenses_schema_js_1.createExpenseSchema), expenses_controller_js_1.expensesController.create);
+router.patch('/:id', (0, validate_js_1.validate)(expenses_schema_js_1.updateExpenseSchema), expenses_controller_js_1.expensesController.update);
+router.delete('/:id', expenses_controller_js_1.expensesController.delete);
+exports.default = router;
+//# sourceMappingURL=expenses.routes.js.map
