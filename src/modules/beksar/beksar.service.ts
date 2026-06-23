@@ -72,7 +72,7 @@ class BeksarService {
         recordsFailed,
         status,
       };
-    });
+    }, { maxWait: 10000, timeout: 120000 });
   }
 
   async importStatusInventory(fileName: string, fileBuffer: Buffer) {
