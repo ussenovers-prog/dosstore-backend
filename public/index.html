@@ -184,7 +184,9 @@ tailwind.config = {
 // ============================================================
 // API CLIENT
 // ============================================================
-const API_BASE = window.location.hostname === 'localhost' ? 'http://localhost:3001/api' : '/api';
+const API_BASE = window.location.hostname === 'localhost'
+  ? 'http://localhost:3001/api'
+  : (window.location.hostname.endsWith('mule.page') ? 'https://dosstore-backend.onrender.com/api' : '/api');
 
 const api = {
   token: localStorage.getItem('accessToken'),
@@ -260,7 +262,7 @@ const api = {
 // ============================================================
 function getDemoData(method, path) {
   if (path.includes('/dashboard/kpi')) return { data: { revenue: 2450000, grossProfit: 980000, netProfit: 520000, avgCheck: 8750, margin: 40, adSpend: 185000, cac: 3200, adROI: 4.35, drr: 7.55, visitors: 5800, buyers: 280, conversion: 4.83, inventoryValue: 8500000, inventoryItems: 1240 } };
-  if (path.includes('/dashboard/sales-dynamic')) return { data: Array.from({length:30}, (_,i) => ({ date: new Date(Date.now()-((29-i)*86400000))).toISOString().split('T')[0], revenue: 50000+Math.random()*80000, storeId: (i%2)+1 })) };
+  if (path.includes('/dashboard/sales-dynamic')) return { data: Array.from({length:30}, (_,i) => ({ date: new Date(Date.now()-((29-i)*86400000)).toISOString().split('T')[0], revenue: 50000+Math.random()*80000, storeId: (i%2)+1 })) };
   if (path.includes('/dashboard/stores-comparison')) return { data: [{ storeId:1, storeName:'Dosstore', revenue:1450000, grossProfit:580000, netProfit:310000, adSpend:95000, visitors:3200, buyers:160, conversion:5, avgCheck:9062 },{ storeId:2, storeName:'Status', revenue:1000000, grossProfit:400000, netProfit:210000, adSpend:90000, visitors:2600, buyers:120, conversion:4.6, avgCheck:8333 }] };
   if (path.includes('/dashboard/top-products')) return { data: Array.from({length:10}, (_,i) => ({ productId:i+1, productName:`Товар ${i+1}`, article:`ART-${1000+i}`, brand:['Nike','Adidas','Zara','H&M','Puma'][i%5], totalAmount: 250000-i*20000, quantity: 45-i*3 })) };
   if (path.includes('/dashboard/abc-analysis')) { const tp = getDemoData('GET','/dashboard/top-products').data; return { data: { a:{items:tp.slice(0,3),revenueShare:72}, b:{items:tp.slice(3,6),revenueShare:19}, c:{items:tp.slice(6),revenueShare:9} } }; }
@@ -297,6 +299,12 @@ function getFilters() {
   if (storeId) params.set('storeId', storeId);
   if (dateFrom) params.set('dateFrom', dateFrom);
   if (dateTo) params.set('dateTo', dateTo);
+  return params.toString() ? `?${params.toString()}` : '';
+}
+
+function appendQueryParam(query, key, value) {
+  const params = new URLSearchParams(query.startsWith('?') ? query.slice(1) : query);
+  if (value) params.set(key, value);
   return params.toString() ? `?${params.toString()}` : '';
 }
 
@@ -471,6 +479,10 @@ async function renderSales(el) {
           </table>
         </div>
       </div>
+    </div>
+    <div class="flex gap-3 mb-4">
+      <button onclick="openBeksarImportModal('sales')" class="btn-primary px-4 py-2 rounded-lg text-white text-xs font-medium">+ Импорт продаж Status</button>
+      <button onclick="openBeksarImportModal('inventory')" class="btn-primary px-4 py-2 rounded-lg text-white text-xs font-medium">+ Импорт остатков Status</button>
     </div>
     <div class="bg-surface-800 rounded-xl border border-surface-700 p-4">
       <h3 class="text-sm font-semibold text-white mb-3">Сравнение магазинов</h3>
@@ -906,12 +918,14 @@ async function renderImports(el) {
 async function loadImportsList() {
   const f = getFilters();
   const statusFilter = document.getElementById('importStatusFilter')?.value || '';
-  const query = statusFilter ? `${f}&status=${statusFilter}` : f;
+  const query = appendQueryParam(f, 'status', statusFilter);
   
   const data = await api.get(`/imports${query}`);
   const imports = data.data || [];
 
   const sourceNames = {
+    beksar_status_sales: 'Продажи Status',
+    beksar_status_inventory: 'Остатки Status',
     ftp_beksar_sales: 'Продажи',
     ftp_beksar_arrival: 'Приходы',
     ftp_beksar_inventory: 'Остатки',
@@ -945,6 +959,74 @@ async function loadImportsList() {
       <td class="px-3 py-2 text-xs ${imp.recordsFailed > 0 ? 'text-danger-400' : 'text-surface-200'}">${imp.recordsFailed > 0 ? imp.recordsFailed : '—'}${imp.errorMessage ? ` <span class="text-surface-200" title="${imp.errorMessage}">ⓘ</span>` : ''}</td>
     </tr>
   `).join('') : '<tr><td colspan="7" class="px-3 py-6 text-center text-surface-200">Нет импортов</td></tr>';
+}
+
+function openBeksarImportModal(type) {
+  const typeNames = { sales: 'продаж Status', inventory: 'остатков Status' };
+  openModal(`
+    <div class="p-6">
+      <h3 class="text-lg font-bold text-white mb-4">Импорт ${typeNames[type] || 'Status'}</h3>
+      <form id="beksarImportForm" class="space-y-4">
+        <input type="hidden" id="beksarImportType" value="${type}">
+        <input type="hidden" id="beksarImportStore" value="2">
+        <div>
+          <label class="block text-xs text-surface-200 mb-1">Магазин</label>
+          <input value="Status" class="input-dark w-full px-3 py-2 rounded-lg text-sm" disabled>
+        </div>
+        <div>
+          <label class="block text-xs text-surface-200 mb-1">Файл XLS/XLSX</label>
+          <input type="file" id="beksarImportFile" accept=".xls,.xlsx" class="input-dark w-full px-3 py-2 rounded-lg text-sm" required>
+        </div>
+        <div id="beksarImportError" class="hidden text-danger-400 text-sm bg-danger-500/10 border border-danger-500/20 rounded-lg px-4 py-3"></div>
+        <div class="flex gap-2 pt-2">
+          <button type="submit" class="btn-primary flex-1 py-2 rounded-lg text-white text-sm font-medium">Импортировать</button>
+          <button type="button" onclick="closeModal()" class="flex-1 py-2 rounded-lg text-surface-200 bg-surface-700 text-sm">Отмена</button>
+        </div>
+      </form>
+    </div>
+  `);
+
+  document.getElementById('beksarImportForm').addEventListener('submit', submitBeksarImport);
+}
+
+async function submitBeksarImport(event) {
+  event.preventDefault();
+
+  const errorEl = document.getElementById('beksarImportError');
+  errorEl.classList.add('hidden');
+
+  const type = document.getElementById('beksarImportType').value;
+  const fileInput = document.getElementById('beksarImportFile');
+
+  if (!fileInput.files.length) {
+    errorEl.textContent = 'Выберите файл';
+    errorEl.classList.remove('hidden');
+    return;
+  }
+
+  const formData = new FormData();
+  formData.append('file', fileInput.files[0]);
+  formData.append('storeId', '2');
+
+  try {
+    const endpoint = type === 'sales' ? '/beksar/import/sales' : '/beksar/import/inventory';
+    const res = await fetch(`${API_BASE}${endpoint}`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${api.token}` },
+      body: formData,
+    });
+    const result = await res.json();
+
+    if (!res.ok) {
+      throw new Error(result.error?.message || result.message || 'Import failed');
+    }
+
+    closeModal();
+    renderImports(document.getElementById('pageContent'));
+  } catch (error) {
+    errorEl.textContent = error.message;
+    errorEl.classList.remove('hidden');
+  }
 }
 async function renderSettings(el) {
   const isOwner = api.user?.role === 'owner';

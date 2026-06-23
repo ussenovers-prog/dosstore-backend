@@ -57,37 +57,6 @@ router.get('/', async (req: AuthenticatedRequest, res: Response, next: NextFunct
 });
 
 /**
- * GET /api/imports/:id
- * Детали конкретного импорта
- */
-router.get('/:id', async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
-  try {
-    const id = parseInt(req.params.id);
-    const importLog = await prisma.importLog.findUnique({
-      where: { id },
-      include: {
-        store: { select: { id: true, name: true } },
-      },
-    });
-
-    if (!importLog) {
-      res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Import not found' } });
-      return;
-    }
-
-    // Проверка доступа для employee
-    if (req.user.role === 'employee' && importLog.storeId !== req.user.storeId) {
-      res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Access denied' } });
-      return;
-    }
-
-    res.json({ data: importLog });
-  } catch (error) {
-    next(error);
-  }
-});
-
-/**
  * GET /api/imports/stats
  * Статистика импортов
  */
@@ -118,6 +87,37 @@ router.get('/stats/summary', async (req: AuthenticatedRequest, res: Response, ne
         lastImportAt: lastImport?.importedAt || null,
       },
     });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * GET /api/imports/:id
+ * Детали конкретного импорта
+ */
+router.get('/:id', async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const id = parseInt(req.params.id);
+    const importLog = await prisma.importLog.findUnique({
+      where: { id },
+      include: {
+        store: { select: { id: true, name: true } },
+      },
+    });
+
+    if (!importLog) {
+      res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Import not found' } });
+      return;
+    }
+
+    // Проверка доступа для employee
+    if (req.user.role === 'employee' && importLog.storeId !== req.user.storeId) {
+      res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Access denied' } });
+      return;
+    }
+
+    res.json({ data: importLog });
   } catch (error) {
     next(error);
   }
