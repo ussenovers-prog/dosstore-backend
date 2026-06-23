@@ -265,6 +265,7 @@ model ImportLog {
   sourceType       String   // ftp_beksar_sales | ftp_beksar_arrival | etc.
   storeId          Int?
   fileName         String
+  fileHash         String?
   status           String   @default("success") // success | error | partial
   recordsProcessed Int      @default(0)
   recordsFailed    Int      @default(0)
@@ -276,5 +277,6 @@ model ImportLog {
   @@index([sourceType])
   @@index([importedAt])
   @@index([storeId])
+  @@index([fileHash])
   @@map("import_log")
 }

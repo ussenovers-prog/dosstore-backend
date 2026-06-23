@@ -19,6 +19,7 @@ import expensesRoutes from './modules/expenses/expenses.routes.js';
 import visitorsRoutes from './modules/visitors/visitors.routes.js';
 import dashboardRoutes from './modules/dashboard/dashboard.routes.js';
 import importsRoutes from './modules/imports/imports.routes.js';
+import beksarRoutes from './modules/beksar/beksar.routes.js';
 
 // Import services (optional background tasks)
 // import { ftpWatcher } from './services/ftp/ftp-watcher.service.js';
@@ -64,6 +65,7 @@ app.use('/api/expenses', expensesRoutes);
 app.use('/api/visitors', visitorsRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/imports', importsRoutes);
+app.use('/api/beksar', beksarRoutes);
 
 // ============================================================
 // Static Frontend (SPA)
@@ -144,6 +146,9 @@ app.listen(env.PORT, '0.0.0.0', () => {
   console.log('  GET    /api/imports');
   console.log('  GET    /api/imports/:id');
   console.log('  GET    /api/imports/stats/summary');
+  console.log('');
+  console.log('  POST   /api/beksar/import/sales');
+  console.log('  POST   /api/beksar/import/inventory');
   console.log('');
 
   // Start FTP watcher (if configured)
