@@ -72,7 +72,7 @@ class BeksarService {
         recordsFailed,
         status,
       };
-    });
+    }, { maxWait: 10000, timeout: 120000 });
   }
 
   async importStatusInventory(fileName: string, fileBuffer: Buffer) {
@@ -84,51 +84,49 @@ class BeksarService {
       throw new Error('No inventory rows found in file');
     }
 
-    return prisma.$transaction(async (tx) => {
-      const importLog = await tx.importLog.create({
-        data: {
-          sourceType: STATUS_INVENTORY_SOURCE,
-          storeId: STATUS_STORE_ID,
-          fileName,
-          fileHash,
-          status: 'success',
-          recordsProcessed: 0,
-          recordsFailed: 0,
-        },
-      });
-
-      let recordsProcessed = 0;
-      let recordsFailed = 0;
-
-      for (const item of parsed.items) {
-        try {
-          await this.upsertInventoryItem(tx, item);
-          recordsProcessed += 1;
-        } catch (error) {
-          recordsFailed += 1;
-          console.error('[Beksar] Failed to import inventory row', item.rowNumber, error);
-        }
-      }
-
-      const status = this.resolveStatus(recordsProcessed, recordsFailed);
-      const errorMessage = recordsFailed > 0 ? `${recordsFailed} inventory rows failed` : null;
-
-      await tx.importLog.update({
-        where: { id: importLog.id },
-        data: { status, recordsProcessed, recordsFailed, errorMessage },
-      });
-
-      return {
+    const importLog = await prisma.importLog.create({
+      data: {
+        sourceType: STATUS_INVENTORY_SOURCE,
+        storeId: STATUS_STORE_ID,
         fileName,
         fileHash,
-        storeId: STATUS_STORE_ID,
-        sourceType: STATUS_INVENTORY_SOURCE,
-        snapshotDate: parsed.snapshotDate,
-        recordsProcessed,
-        recordsFailed,
-        status,
-      };
+        status: 'processing',
+        recordsProcessed: 0,
+        recordsFailed: 0,
+      },
     });
+
+    let recordsProcessed = 0;
+    let recordsFailed = 0;
+
+    for (const item of parsed.items) {
+      try {
+        await this.upsertInventoryItem(prisma, item);
+        recordsProcessed += 1;
+      } catch (error) {
+        recordsFailed += 1;
+        console.error('[Beksar] Failed to import inventory row', item.rowNumber, error);
+      }
+    }
+
+    const status = this.resolveStatus(recordsProcessed, recordsFailed);
+    const errorMessage = recordsFailed > 0 ? `${recordsFailed} inventory rows failed` : null;
+
+    await prisma.importLog.update({
+      where: { id: importLog.id },
+      data: { status, recordsProcessed, recordsFailed, errorMessage },
+    });
+
+    return {
+      fileName,
+      fileHash,
+      storeId: STATUS_STORE_ID,
+      sourceType: STATUS_INVENTORY_SOURCE,
+      snapshotDate: parsed.snapshotDate,
+      recordsProcessed,
+      recordsFailed,
+      status,
+    };
   }
 
   private async assertNotImported(fileHash: string, storeId: number, sourceType: string) {
@@ -145,7 +143,7 @@ class BeksarService {
     if (existing) throw new DuplicateImportError();
   }
 
-  private async upsertSale(tx: PrismaTransaction, sale: ParsedBeksarSale, fileHash: string) {
+  private async upsertSale(tx: PrismaExecutor, sale: ParsedBeksarSale, fileHash: string) {
     const product = await this.upsertProduct(tx, {
       article: sale.article,
       barcode: sale.barcode,
@@ -193,7 +191,7 @@ class BeksarService {
     });
   }
 
-  private async upsertInventoryItem(tx: PrismaTransaction, item: ParsedBeksarInventoryItem) {
+  private async upsertInventoryItem(tx: PrismaExecutor, item: ParsedBeksarInventoryItem) {
     const product = await this.upsertProduct(tx, {
       article: item.article,
       barcode: item.barcode,
@@ -225,7 +223,7 @@ class BeksarService {
     });
   }
 
-  private async upsertProduct(tx: PrismaTransaction, product: ProductInput) {
+  private async upsertProduct(tx: PrismaExecutor, product: ProductInput) {
     return tx.product.upsert({
       where: {
         storeId_beksarId: {
@@ -270,6 +268,6 @@ interface ProductInput {
   retailPrice: number | null;
 }
 
-type PrismaTransaction = Prisma.TransactionClient;
+type PrismaExecutor = Pick<Prisma.TransactionClient, 'product' | 'sale' | 'inventory'>;
 
 export const beksarService = new BeksarService();
