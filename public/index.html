@@ -504,9 +504,10 @@ async function renderSales(el) {
   </div>`;
 
   const f = getFilters();
+  const topProductsQuery = appendQueryParam(f, 'limit', '15');
   const [salesDyn, topProd, storesComp] = await Promise.all([
     api.get(`/dashboard/sales-dynamic${f}`),
-    api.get(`/dashboard/top-products${f}&limit=15`),
+    api.get(`/dashboard/top-products${topProductsQuery}`),
     api.get(`/dashboard/stores-comparison${f}`),
   ]);
 
@@ -587,7 +588,7 @@ async function renderInventory(el) {
   const [summary, turnover, lowStock, noMovement] = await Promise.all([
     api.get(`/dashboard/inventory-summary${f}`),
     api.get(`/dashboard/inventory-turnover${f}`),
-    api.get(`/dashboard/low-stock${f}`),
+    api.get(`/dashboard/low-stock-products${f}`),
     api.get(`/dashboard/no-movement-products${f}`),
   ]);
 
