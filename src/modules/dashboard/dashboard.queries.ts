@@ -15,6 +15,36 @@ function buildDateFilter(dateFrom?: string, dateTo?: string): Prisma.DateTimeFil
   return filter;
 }
 
+function toNumber(value: unknown): number {
+  if (value === null || value === undefined) return 0;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
+  if (typeof value === 'object' && 'toNumber' in value) {
+    const decimal = value as { toNumber?: () => number };
+    if (typeof decimal.toNumber === 'function') return decimal.toNumber();
+  }
+
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function buildInventoryWhere(filter: DateFilter): Prisma.InventoryWhereInput {
+  const where: Prisma.InventoryWhereInput = {};
+  const dateFilter = buildDateFilter(filter.dateFrom, filter.dateTo);
+  if (filter.storeId) where.storeId = filter.storeId;
+  if (dateFilter) where.snapshotDate = dateFilter;
+  return where;
+}
+
+async function getLatestInventorySnapshot(filter: DateFilter): Promise<Date | null> {
+  const latestSnapshot = await prisma.inventory.findFirst({
+    where: buildInventoryWhere(filter),
+    orderBy: { snapshotDate: 'desc' },
+    select: { snapshotDate: true },
+  });
+
+  return latestSnapshot?.snapshotDate ?? null;
+}
+
 // ============================================================
 // FINANCIAL KPIs
 // ============================================================
@@ -30,7 +60,7 @@ export async function getRevenue(filter: DateFilter): Promise<number> {
     _sum: { totalAmount: true },
   });
 
-  return result._sum.totalAmount?.toNumber() || 0;
+  return toNumber(result._sum.totalAmount);
 }
 
 export async function getGrossProfit(filter: DateFilter): Promise<number> {
@@ -44,7 +74,7 @@ export async function getGrossProfit(filter: DateFilter): Promise<number> {
     _sum: { grossProfit: true },
   });
 
-  return result._sum.grossProfit?.toNumber() || 0;
+  return toNumber(result._sum.grossProfit);
 }
 
 export async function getNetProfit(filter: DateFilter): Promise<number> {
@@ -60,7 +90,7 @@ export async function getNetProfit(filter: DateFilter): Promise<number> {
     _sum: { amount: true },
   });
 
-  const totalExpenses = expensesResult._sum.amount?.toNumber() || 0;
+  const totalExpenses = toNumber(expensesResult._sum.amount);
   return grossProfit - totalExpenses;
 }
 
@@ -77,7 +107,7 @@ export async function getAvgCheck(filter: DateFilter): Promise<number> {
   });
 
   if (result.length === 0) return 0;
-  const totalRevenue = result.reduce((sum, r) => sum + (r._sum.totalAmount?.toNumber() || 0), 0);
+  const totalRevenue = result.reduce((sum, r) => sum + toNumber(r._sum.totalAmount), 0);
   return totalRevenue / result.length;
 }
 
@@ -103,7 +133,7 @@ export async function getAdSpend(filter: DateFilter): Promise<number> {
     _sum: { amount: true },
   });
 
-  return result._sum.amount?.toNumber() || 0;
+  return toNumber(result._sum.amount);
 }
 
 export async function getCAC(filter: DateFilter): Promise<number> {
@@ -171,15 +201,8 @@ export async function getConversion(filter: DateFilter): Promise<number> {
 // ============================================================
 
 export async function getInventorySummary(filter: DateFilter) {
-  const where: Prisma.InventoryWhereInput = {};
-  if (filter.storeId) where.storeId = filter.storeId;
-
-  // Get latest snapshot
-  const latestSnapshot = await prisma.inventory.findFirst({
-    where,
-    orderBy: { snapshotDate: 'desc' },
-    select: { snapshotDate: true },
-  });
+  const where = buildInventoryWhere(filter);
+  const latestSnapshot = await getLatestInventorySnapshot(filter);
 
   if (!latestSnapshot) {
     return { totalValue: 0, totalItems: 0, snapshotDate: null };
@@ -188,15 +211,15 @@ export async function getInventorySummary(filter: DateFilter) {
   const result = await prisma.inventory.aggregate({
     where: {
       ...where,
-      snapshotDate: latestSnapshot.snapshotDate,
+      snapshotDate: latestSnapshot,
     },
     _sum: { totalValue: true, quantity: true },
   });
 
   return {
-    totalValue: result._sum.totalValue?.toNumber() || 0,
+    totalValue: toNumber(result._sum.totalValue),
     totalItems: result._sum.quantity || 0,
-    snapshotDate: latestSnapshot.snapshotDate,
+    snapshotDate: latestSnapshot,
   };
 }
 
@@ -204,55 +227,52 @@ export async function getNoMovementProducts(filter: DateFilter, days: number = 3
   const cutoffDate = new Date();
   cutoffDate.setDate(cutoffDate.getDate() - days);
 
-  const dateFilter = buildDateFilter(filter.dateFrom, filter.dateTo);
-  const where: Prisma.ProductWhereInput = {};
-  if (filter.storeId) where.storeId = filter.storeId;
+  const latestSnapshot = await getLatestInventorySnapshot(filter);
+  if (!latestSnapshot) return [];
 
-  const products = await prisma.product.findMany({
-    where,
-    select: {
-      id: true,
-      name: true,
-      article: true,
-      brand: true,
-      _count: {
-        select: {
-          sales: {
-            where: {
-              saleDate: { gte: cutoffDate },
-            },
-          },
-        },
-      },
+  const items = await prisma.inventory.findMany({
+    where: {
+      ...buildInventoryWhere(filter),
+      snapshotDate: latestSnapshot,
+    },
+    include: {
+      product: { select: { id: true, name: true, article: true, brand: true } },
     },
   });
 
-  return products.filter((p) => p._count.sales === 0).map((p) => ({
-    id: p.id,
-    name: p.name,
-    article: p.article,
-    brand: p.brand,
+  const productIds = items.map((item) => item.productId);
+  const soldProducts = await prisma.sale.findMany({
+    where: {
+      productId: { in: productIds },
+      saleDate: { gte: cutoffDate },
+      ...(filter.storeId ? { storeId: filter.storeId } : {}),
+    },
+    select: { productId: true },
+    distinct: ['productId'],
+  });
+  const soldProductIds = new Set(soldProducts.map((sale) => sale.productId));
+
+  return items.filter((item) => !soldProductIds.has(item.productId)).map((item) => ({
+    id: item.product.id,
+    name: item.product.name,
+    article: item.product.article,
+    brand: item.product.brand,
   }));
 }
 
 export async function getLowStockProducts(filter: DateFilter, threshold: number = 5) {
   const where: Prisma.InventoryWhereInput = {
+    ...buildInventoryWhere(filter),
     quantity: { lte: threshold },
   };
-  if (filter.storeId) where.storeId = filter.storeId;
-
-  const latestSnapshot = await prisma.inventory.findFirst({
-    where: { storeId: filter.storeId },
-    orderBy: { snapshotDate: 'desc' },
-    select: { snapshotDate: true },
-  });
+  const latestSnapshot = await getLatestInventorySnapshot(filter);
 
   if (!latestSnapshot) return [];
 
   const items = await prisma.inventory.findMany({
     where: {
       ...where,
-      snapshotDate: latestSnapshot.snapshotDate,
+      snapshotDate: latestSnapshot,
     },
     include: {
       product: { select: { id: true, name: true, article: true, brand: true } },
@@ -266,7 +286,7 @@ export async function getLowStockProducts(filter: DateFilter, threshold: number 
     article: item.product.article,
     brand: item.product.brand,
     quantity: item.quantity,
-    totalValue: item.totalValue.toNumber(),
+    totalValue: toNumber(item.totalValue),
   }));
 }
 
@@ -281,7 +301,7 @@ export async function getInventoryTurnover(filter: DateFilter): Promise<number> 
     _sum: { costOfGoods: true },
   });
 
-  const cogs = cogsResult._sum.costOfGoods?.toNumber() || 0;
+  const cogs = toNumber(cogsResult._sum.costOfGoods);
 
   const invSummary = await getInventorySummary(filter);
   if (invSummary.totalValue === 0) return 0;
@@ -320,7 +340,7 @@ export async function getTopProducts(filter: DateFilter & { limit?: number }) {
     productName: productMap.get(r.productId)?.name || 'Unknown',
     article: productMap.get(r.productId)?.article,
     brand: productMap.get(r.productId)?.brand,
-    totalAmount: r._sum.totalAmount?.toNumber() || 0,
+    totalAmount: toNumber(r._sum.totalAmount),
     quantity: r._sum.quantity || 0,
   }));
 }
@@ -423,11 +443,11 @@ export async function getSalesDynamic(filter: DateFilter & { granularity?: strin
     const dateKey = sale.saleDate.toISOString().split('T')[0];
     const existing = grouped.get(dateKey);
     if (existing) {
-      existing.revenue += sale.totalAmount.toNumber();
+      existing.revenue += toNumber(sale.totalAmount);
     } else {
       grouped.set(dateKey, {
         date: dateKey,
-        revenue: sale.totalAmount.toNumber(),
+        revenue: toNumber(sale.totalAmount),
         storeId: sale.storeId,
       });
     }
@@ -454,6 +474,6 @@ export async function getExpenseBreakdown(filter: DateFilter) {
 
   return results.map((r) => ({
     category: r.category,
-    total: r._sum.amount?.toNumber() || 0,
+    total: toNumber(r._sum.amount),
   }));
 }
