@@ -308,6 +308,19 @@ function appendQueryParam(query, key, value) {
   return params.toString() ? `?${params.toString()}` : '';
 }
 
+function getErrorMessage(error) {
+  if (!error) return 'Request failed';
+  if (typeof error === 'string') return error;
+  if (error.message && typeof error.message === 'string') return error.message;
+  if (error.error) return getErrorMessage(error.error);
+  if (error.code && error.message) return `${error.code}: ${getErrorMessage(error.message)}`;
+  try {
+    return JSON.stringify(error);
+  } catch (e) {
+    return 'Request failed';
+  }
+}
+
 function fmt(n) { return new Intl.NumberFormat('ru-RU').format(Math.round(n)); }
 function fmtMoney(n) { return new Intl.NumberFormat('ru-RU', {style:'currency',currency:'RUB',maximumFractionDigits:0}).format(n); }
 function fmtPct(n) { return `${n.toFixed(1)}%`; }
@@ -491,9 +504,10 @@ async function renderSales(el) {
   </div>`;
 
   const f = getFilters();
+  const topProductsQuery = appendQueryParam(f, 'limit', '15');
   const [salesDyn, topProd, storesComp] = await Promise.all([
     api.get(`/dashboard/sales-dynamic${f}`),
-    api.get(`/dashboard/top-products${f}&limit=15`),
+    api.get(`/dashboard/top-products${topProductsQuery}`),
     api.get(`/dashboard/stores-comparison${f}`),
   ]);
 
@@ -574,7 +588,7 @@ async function renderInventory(el) {
   const [summary, turnover, lowStock, noMovement] = await Promise.all([
     api.get(`/dashboard/inventory-summary${f}`),
     api.get(`/dashboard/inventory-turnover${f}`),
-    api.get(`/dashboard/low-stock${f}`),
+    api.get(`/dashboard/low-stock-products${f}`),
     api.get(`/dashboard/no-movement-products${f}`),
   ]);
 
@@ -1018,13 +1032,13 @@ async function submitBeksarImport(event) {
     const result = await res.json();
 
     if (!res.ok) {
-      throw new Error(result.error?.message || result.message || 'Import failed');
+      throw new Error(getErrorMessage(result.error || result.message || result));
     }
 
     closeModal();
     renderImports(document.getElementById('pageContent'));
   } catch (error) {
-    errorEl.textContent = error.message;
+    errorEl.textContent = getErrorMessage(error);
     errorEl.classList.remove('hidden');
   }
 }
