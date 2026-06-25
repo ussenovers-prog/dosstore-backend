@@ -15,6 +15,18 @@ function buildDateFilter(dateFrom?: string, dateTo?: string): Prisma.DateTimeFil
   return filter;
 }
 
+function toNumber(value: unknown): number {
+  if (value === null || value === undefined) return 0;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
+  if (typeof value === 'object' && 'toNumber' in value) {
+    const decimal = value as { toNumber?: () => number };
+    if (typeof decimal.toNumber === 'function') return decimal.toNumber();
+  }
+
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
 // ============================================================
 // FINANCIAL KPIs
 // ============================================================
@@ -30,7 +42,7 @@ export async function getRevenue(filter: DateFilter): Promise<number> {
     _sum: { totalAmount: true },
   });
 
-  return result._sum.totalAmount?.toNumber() || 0;
+  return toNumber(result._sum.totalAmount);
 }
 
 export async function getGrossProfit(filter: DateFilter): Promise<number> {
@@ -44,7 +56,7 @@ export async function getGrossProfit(filter: DateFilter): Promise<number> {
     _sum: { grossProfit: true },
   });
 
-  return result._sum.grossProfit?.toNumber() || 0;
+  return toNumber(result._sum.grossProfit);
 }
 
 export async function getNetProfit(filter: DateFilter): Promise<number> {
@@ -60,7 +72,7 @@ export async function getNetProfit(filter: DateFilter): Promise<number> {
     _sum: { amount: true },
   });
 
-  const totalExpenses = expensesResult._sum.amount?.toNumber() || 0;
+  const totalExpenses = toNumber(expensesResult._sum.amount);
   return grossProfit - totalExpenses;
 }
 
@@ -77,7 +89,7 @@ export async function getAvgCheck(filter: DateFilter): Promise<number> {
   });
 
   if (result.length === 0) return 0;
-  const totalRevenue = result.reduce((sum, r) => sum + (r._sum.totalAmount?.toNumber() || 0), 0);
+  const totalRevenue = result.reduce((sum, r) => sum + toNumber(r._sum.totalAmount), 0);
   return totalRevenue / result.length;
 }
 
@@ -103,7 +115,7 @@ export async function getAdSpend(filter: DateFilter): Promise<number> {
     _sum: { amount: true },
   });
 
-  return result._sum.amount?.toNumber() || 0;
+  return toNumber(result._sum.amount);
 }
 
 export async function getCAC(filter: DateFilter): Promise<number> {
@@ -194,7 +206,7 @@ export async function getInventorySummary(filter: DateFilter) {
   });
 
   return {
-    totalValue: result._sum.totalValue?.toNumber() || 0,
+    totalValue: toNumber(result._sum.totalValue),
     totalItems: result._sum.quantity || 0,
     snapshotDate: latestSnapshot.snapshotDate,
   };
@@ -266,7 +278,7 @@ export async function getLowStockProducts(filter: DateFilter, threshold: number 
     article: item.product.article,
     brand: item.product.brand,
     quantity: item.quantity,
-    totalValue: item.totalValue.toNumber(),
+    totalValue: toNumber(item.totalValue),
   }));
 }
 
@@ -281,7 +293,7 @@ export async function getInventoryTurnover(filter: DateFilter): Promise<number> 
     _sum: { costOfGoods: true },
   });
 
-  const cogs = cogsResult._sum.costOfGoods?.toNumber() || 0;
+  const cogs = toNumber(cogsResult._sum.costOfGoods);
 
   const invSummary = await getInventorySummary(filter);
   if (invSummary.totalValue === 0) return 0;
@@ -320,7 +332,7 @@ export async function getTopProducts(filter: DateFilter & { limit?: number }) {
     productName: productMap.get(r.productId)?.name || 'Unknown',
     article: productMap.get(r.productId)?.article,
     brand: productMap.get(r.productId)?.brand,
-    totalAmount: r._sum.totalAmount?.toNumber() || 0,
+    totalAmount: toNumber(r._sum.totalAmount),
     quantity: r._sum.quantity || 0,
   }));
 }
@@ -423,11 +435,11 @@ export async function getSalesDynamic(filter: DateFilter & { granularity?: strin
     const dateKey = sale.saleDate.toISOString().split('T')[0];
     const existing = grouped.get(dateKey);
     if (existing) {
-      existing.revenue += sale.totalAmount.toNumber();
+      existing.revenue += toNumber(sale.totalAmount);
     } else {
       grouped.set(dateKey, {
         date: dateKey,
-        revenue: sale.totalAmount.toNumber(),
+        revenue: toNumber(sale.totalAmount),
         storeId: sale.storeId,
       });
     }
@@ -454,6 +466,6 @@ export async function getExpenseBreakdown(filter: DateFilter) {
 
   return results.map((r) => ({
     category: r.category,
-    total: r._sum.amount?.toNumber() || 0,
+    total: toNumber(r._sum.amount),
   }));
 }
