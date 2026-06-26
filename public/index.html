@@ -279,9 +279,13 @@ function getDemoData(method, path) {
     database: { status:'ok', checkedAt: new Date().toISOString() },
     statusStore: { id:2, name:'Status', code:'status', isActive:true },
     statusData: { salesCount:12, inventoryCount:508, latestInventorySnapshotDate:'2026-06-23T00:00:00.000Z' },
+    dosstoreStore: { id:1, name:'Dosstore', code:'dosstore', isActive:true },
+    dosstoreData: { salesCount:45, inventoryCount:198, latestInventorySnapshotDate:'2026-01-14T00:00:00.000Z' },
     imports: {
       lastStatusSalesImport: { id:5, sourceType:'beksar_status_sales', fileName:'ers beksar prodazha.xlsx', status:'success', recordsProcessed:12, recordsFailed:0, importedAt:new Date(Date.now()-86400000).toISOString() },
       lastStatusInventoryImport: { id:6, sourceType:'beksar_status_inventory', fileName:'ers status beksar ostatok.xls', status:'success', recordsProcessed:508, recordsFailed:0, importedAt:new Date(Date.now()-3600000).toISOString() },
+      lastDosstoreSalesImport: { id:1, sourceType:'ftp_beksar_sales', fileName:'sales_20240115.xml', status:'success', recordsProcessed:45, recordsFailed:0, importedAt:new Date(Date.now()-7200000).toISOString() },
+      lastDosstoreInventoryImport: { id:3, sourceType:'ftp_beksar_inventory', fileName:'inventory_20240114.xml', status:'partial', recordsProcessed:198, recordsFailed:2, importedAt:new Date(Date.now()-86400000).toISOString() },
     },
     duplicateProtection: { status:'enabled', fileHashGuard:true, guardedSourceTypes:['beksar_status_sales','beksar_status_inventory'], protectedImports:3, message:'Duplicate Status files are rejected by file hash.' },
   } };
@@ -1097,19 +1101,27 @@ async function loadSystemHealth() {
     const response = await api.get('/system/health');
     const data = response.data || {};
     const statusData = data.statusData || {};
+    const dosstoreData = data.dosstoreData || {};
     const imports = data.imports || {};
     const duplicateProtection = data.duplicateProtection || {};
-    const storeLabel = data.statusStore
+    const statusStoreLabel = data.statusStore
       ? `${escapeHtml(data.statusStore.name)} · ${data.statusStore.isActive ? 'активен' : 'отключен'}`
       : 'Status не найден';
+    const dosstoreStoreLabel = data.dosstoreStore
+      ? `${escapeHtml(data.dosstoreStore.name)} · ${data.dosstoreStore.isActive ? 'активен' : 'отключен'}`
+      : 'Dosstore не найден';
 
     panel.innerHTML = `
       <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
         ${healthMetricCard('Backend health', 'OK', healthStatusBadge(data.backend?.status))}
         ${healthMetricCard('Database connection', data.database?.message ? escapeHtml(data.database.message) : 'OK', healthStatusBadge(data.database?.status))}
       </div>
+      <div class="flex items-center justify-between gap-2 mb-2">
+        <p class="text-xs uppercase tracking-wide text-surface-200">Status</p>
+        <span class="text-xs text-surface-300">Отдельные данные магазина</span>
+      </div>
       <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
-        ${healthMetricCard('Status store', storeLabel, healthStatusBadge(data.statusStore?.isActive))}
+        ${healthMetricCard('Status store', statusStoreLabel, healthStatusBadge(data.statusStore?.isActive))}
         ${healthMetricCard('Status sales count', fmtCount(statusData.salesCount))}
         ${healthMetricCard('Status inventory count', fmtCount(statusData.inventoryCount))}
       </div>
@@ -1117,6 +1129,20 @@ async function loadSystemHealth() {
         ${healthMetricCard('Last inventory snapshot', fmtDate(statusData.latestInventorySnapshotDate))}
         ${healthImportCard('Last Status sales import', imports.lastStatusSalesImport)}
         ${healthImportCard('Last Status inventory import', imports.lastStatusInventoryImport)}
+      </div>
+      <div class="flex items-center justify-between gap-2 mb-2">
+        <p class="text-xs uppercase tracking-wide text-surface-200">Dosstore</p>
+        <span class="text-xs text-surface-300">Отдельные данные магазина</span>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
+        ${healthMetricCard('Dosstore store', dosstoreStoreLabel, healthStatusBadge(data.dosstoreStore?.isActive))}
+        ${healthMetricCard('Dosstore sales count', fmtCount(dosstoreData.salesCount))}
+        ${healthMetricCard('Dosstore inventory count', fmtCount(dosstoreData.inventoryCount))}
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
+        ${healthMetricCard('Dosstore inventory snapshot', fmtDate(dosstoreData.latestInventorySnapshotDate))}
+        ${healthImportCard('Last Dosstore sales import', imports.lastDosstoreSalesImport)}
+        ${healthImportCard('Last Dosstore inventory import', imports.lastDosstoreInventoryImport)}
       </div>
       <div class="bg-surface-700/50 rounded-lg p-4">
         <div class="flex items-center justify-between gap-2 mb-2">
