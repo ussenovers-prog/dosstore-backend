@@ -274,6 +274,17 @@ function getDemoData(method, path) {
   if (path.includes('/visitors')) return { data: Array.from({length:14}, (_,i) => ({ id:i+1, storeId:(i%2)+1, visitDate: new Date(Date.now()-i*86400000).toISOString().split('T')[0], count:Math.floor(80+Math.random()*120), buyersCount:Math.floor(5+Math.random()*20), store:{id:(i%2)+1,name:['Dosstore','Status'][i%2]} })), meta:{page:1,limit:50,total:14,totalPages:1} };
   if (path.includes('/stores')) return { data: [{id:1,name:'Dosstore',code:'dosstore',isActive:true,_count:{users:2,products:450}},{id:2,name:'Status',code:'status',isActive:true,_count:{users:1,products:380}}] };
   if (path.includes('/users')) return { data: [{id:1,email:'owner@example.com',fullName:'Owner',role:'owner',storeId:null,isActive:true,store:null},{id:2,email:'dosstore@example.com',fullName:'Dosstore Employee',role:'employee',storeId:1,isActive:true,store:{id:1,name:'Dosstore'}}] };
+  if (path.includes('/system/health')) return { data: {
+    backend: { status:'ok', checkedAt: new Date().toISOString() },
+    database: { status:'ok', checkedAt: new Date().toISOString() },
+    statusStore: { id:2, name:'Status', code:'status', isActive:true },
+    statusData: { salesCount:12, inventoryCount:508, latestInventorySnapshotDate:'2026-06-23T00:00:00.000Z' },
+    imports: {
+      lastStatusSalesImport: { id:5, sourceType:'beksar_status_sales', fileName:'ers beksar prodazha.xlsx', status:'success', recordsProcessed:12, recordsFailed:0, importedAt:new Date(Date.now()-86400000).toISOString() },
+      lastStatusInventoryImport: { id:6, sourceType:'beksar_status_inventory', fileName:'ers status beksar ostatok.xls', status:'success', recordsProcessed:508, recordsFailed:0, importedAt:new Date(Date.now()-3600000).toISOString() },
+    },
+    duplicateProtection: { status:'enabled', fileHashGuard:true, guardedSourceTypes:['beksar_status_sales','beksar_status_inventory'], protectedImports:3, message:'Duplicate Status files are rejected by file hash.' },
+  } };
   if (path.includes('/imports/stats/summary')) return { data: { total:5, success:3, errors:1, partial:1, lastImportAt: new Date().toISOString() } };
   if (path.includes('/imports')) return { data: [
     {id:1,sourceType:'ftp_beksar_sales',storeId:1,fileName:'sales_20240115.xml',status:'success',recordsProcessed:45,recordsFailed:0,importedAt:new Date(Date.now()-1000*60*60*2).toISOString(),store:{id:1,name:'Dosstore'}},
@@ -308,22 +319,15 @@ function appendQueryParam(query, key, value) {
   return params.toString() ? `?${params.toString()}` : '';
 }
 
-function getErrorMessage(error) {
-  if (!error) return 'Request failed';
-  if (typeof error === 'string') return error;
-  if (error.message && typeof error.message === 'string') return error.message;
-  if (error.error) return getErrorMessage(error.error);
-  if (error.code && error.message) return `${error.code}: ${getErrorMessage(error.message)}`;
-  try {
-    return JSON.stringify(error);
-  } catch (e) {
-    return 'Request failed';
-  }
-}
-
 function fmt(n) { return new Intl.NumberFormat('ru-RU').format(Math.round(n)); }
 function fmtMoney(n) { return new Intl.NumberFormat('ru-RU', {style:'currency',currency:'RUB',maximumFractionDigits:0}).format(n); }
 function fmtPct(n) { return `${n.toFixed(1)}%`; }
+function fmtCount(n) { return n === null || n === undefined ? '—' : fmt(n); }
+function fmtDateTime(value) { return value ? new Date(value).toLocaleString('ru-RU', {day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit'}) : '—'; }
+function fmtDate(value) { return value ? new Date(value).toLocaleDateString('ru-RU') : '—'; }
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, char => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[char]));
+}
 
 // ============================================================
 // AUTH & ROUTING
@@ -504,10 +508,9 @@ async function renderSales(el) {
   </div>`;
 
   const f = getFilters();
-  const topProductsQuery = appendQueryParam(f, 'limit', '15');
   const [salesDyn, topProd, storesComp] = await Promise.all([
     api.get(`/dashboard/sales-dynamic${f}`),
-    api.get(`/dashboard/top-products${topProductsQuery}`),
+    api.get(`/dashboard/top-products${f}&limit=15`),
     api.get(`/dashboard/stores-comparison${f}`),
   ]);
 
@@ -588,7 +591,7 @@ async function renderInventory(el) {
   const [summary, turnover, lowStock, noMovement] = await Promise.all([
     api.get(`/dashboard/inventory-summary${f}`),
     api.get(`/dashboard/inventory-turnover${f}`),
-    api.get(`/dashboard/low-stock-products${f}`),
+    api.get(`/dashboard/low-stock${f}`),
     api.get(`/dashboard/no-movement-products${f}`),
   ]);
 
@@ -1032,14 +1035,106 @@ async function submitBeksarImport(event) {
     const result = await res.json();
 
     if (!res.ok) {
-      throw new Error(getErrorMessage(result.error || result.message || result));
+      throw new Error(result.error?.message || result.message || 'Import failed');
     }
 
     closeModal();
     renderImports(document.getElementById('pageContent'));
   } catch (error) {
-    errorEl.textContent = getErrorMessage(error);
+    errorEl.textContent = error.message;
     errorEl.classList.remove('hidden');
+  }
+}
+
+function healthStatusBadge(status) {
+  const ok = status === 'ok' || status === 'enabled' || status === true;
+  return `<span class="px-2 py-0.5 rounded-full text-xs ${ok ? 'bg-success-500/10 text-success-400' : 'bg-danger-500/10 text-danger-400'}">${ok ? 'OK' : 'Ошибка'}</span>`;
+}
+
+function healthMetricCard(label, value, badge = '') {
+  return `
+    <div class="bg-surface-700/50 rounded-lg p-4">
+      <div class="flex items-center justify-between gap-2 mb-2">
+        <p class="text-xs text-surface-200">${label}</p>
+        ${badge}
+      </div>
+      <p class="text-lg font-bold text-white">${value}</p>
+    </div>
+  `;
+}
+
+function healthImportCard(title, item) {
+  if (!item) {
+    return healthMetricCard(title, '—', '<span class="px-2 py-0.5 rounded-full text-xs bg-warn-500/10 text-warn-400">Нет данных</span>');
+  }
+
+  const statusClass = item.status === 'success'
+    ? 'bg-success-500/10 text-success-400'
+    : item.status === 'partial'
+      ? 'bg-warn-500/10 text-warn-400'
+      : 'bg-danger-500/10 text-danger-400';
+
+  return `
+    <div class="bg-surface-700/50 rounded-lg p-4">
+      <div class="flex items-center justify-between gap-2 mb-2">
+        <p class="text-xs text-surface-200">${title}</p>
+        <span class="px-2 py-0.5 rounded-full text-xs ${statusClass}">${item.status}</span>
+      </div>
+      <p class="text-sm font-medium text-white truncate" title="${escapeHtml(item.fileName)}">${escapeHtml(item.fileName)}</p>
+      <p class="text-xs text-surface-200 mt-1">${fmtDateTime(item.importedAt)} · ${fmtCount(item.recordsProcessed)} записей</p>
+      ${item.recordsFailed ? `<p class="text-xs text-danger-400 mt-1">Ошибок: ${fmtCount(item.recordsFailed)}</p>` : ''}
+    </div>
+  `;
+}
+
+async function loadSystemHealth() {
+  const panel = document.getElementById('systemHealthPanel');
+  if (!panel) return;
+
+  panel.innerHTML = '<div class="text-sm text-surface-200">Проверка состояния...</div>';
+
+  try {
+    const response = await api.get('/system/health');
+    const data = response.data || {};
+    const statusData = data.statusData || {};
+    const imports = data.imports || {};
+    const duplicateProtection = data.duplicateProtection || {};
+    const storeLabel = data.statusStore
+      ? `${escapeHtml(data.statusStore.name)} · ${data.statusStore.isActive ? 'активен' : 'отключен'}`
+      : 'Status не найден';
+
+    panel.innerHTML = `
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+        ${healthMetricCard('Backend health', 'OK', healthStatusBadge(data.backend?.status))}
+        ${healthMetricCard('Database connection', data.database?.message ? escapeHtml(data.database.message) : 'OK', healthStatusBadge(data.database?.status))}
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
+        ${healthMetricCard('Status store', storeLabel, healthStatusBadge(data.statusStore?.isActive))}
+        ${healthMetricCard('Status sales count', fmtCount(statusData.salesCount))}
+        ${healthMetricCard('Status inventory count', fmtCount(statusData.inventoryCount))}
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
+        ${healthMetricCard('Last inventory snapshot', fmtDate(statusData.latestInventorySnapshotDate))}
+        ${healthImportCard('Last Status sales import', imports.lastStatusSalesImport)}
+        ${healthImportCard('Last Status inventory import', imports.lastStatusInventoryImport)}
+      </div>
+      <div class="bg-surface-700/50 rounded-lg p-4">
+        <div class="flex items-center justify-between gap-2 mb-2">
+          <p class="text-xs text-surface-200">Duplicate protection</p>
+          ${healthStatusBadge(duplicateProtection.status)}
+        </div>
+        <p class="text-sm text-white">${duplicateProtection.fileHashGuard ? 'File hash guard enabled' : 'File hash guard unavailable'}</p>
+        <p class="text-xs text-surface-200 mt-1">Protected Status imports: ${fmtCount(duplicateProtection.protectedImports)}</p>
+        <p class="text-xs text-surface-200 mt-1">${escapeHtml(duplicateProtection.message || '—')}</p>
+      </div>
+    `;
+  } catch (error) {
+    panel.innerHTML = `
+      <div class="bg-danger-500/10 border border-danger-500/20 rounded-lg p-4">
+        <p class="text-sm font-medium text-danger-400">System Health недоступен</p>
+        <p class="text-xs text-surface-200 mt-1">${escapeHtml(error.message || 'Request failed')}</p>
+      </div>
+    `;
   }
 }
 async function renderSettings(el) {
@@ -1060,6 +1155,16 @@ async function renderSettings(el) {
     </div>
 
     ${isOwner ? `
+    <div class="bg-surface-800 rounded-xl border border-surface-700 p-6 mb-6">
+      <div class="flex items-center justify-between gap-3 mb-4">
+        <h3 class="text-sm font-semibold text-white">System Health</h3>
+        <button onclick="loadSystemHealth()" class="px-3 py-1.5 rounded-lg bg-surface-700 text-surface-100 hover:bg-surface-600 text-xs font-medium">Обновить</button>
+      </div>
+      <div id="systemHealthPanel">
+        <div class="text-sm text-surface-200">Проверка состояния...</div>
+      </div>
+    </div>
+
     <div class="bg-surface-800 rounded-xl border border-surface-700 p-6 mb-6">
       <h3 class="text-sm font-semibold text-white mb-4">Магазины</h3>
       <div id="storesList" class="space-y-3"></div>
@@ -1116,6 +1221,8 @@ async function renderSettings(el) {
   }
 
   if (!isOwner) return;
+
+  await loadSystemHealth();
 
   // Load stores
   const storesData = await api.get('/stores');
