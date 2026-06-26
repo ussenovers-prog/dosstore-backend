@@ -10,6 +10,8 @@ const router = Router();
 const STATUS_SALES_SOURCE = 'beksar_status_sales';
 const STATUS_INVENTORY_SOURCE = 'beksar_status_inventory';
 const STATUS_SOURCE_TYPES = [STATUS_SALES_SOURCE, STATUS_INVENTORY_SOURCE];
+const DOSSTORE_SALES_SOURCE = 'ftp_beksar_sales';
+const DOSSTORE_INVENTORY_SOURCE = 'ftp_beksar_inventory';
 
 router.use(authMiddleware);
 router.use(requireOwner);
@@ -32,9 +34,17 @@ router.get('/health', async (req: AuthenticatedRequest, res: Response, next: Nex
         inventoryCount: null,
         latestInventorySnapshotDate: null,
       },
+      dosstoreStore: null,
+      dosstoreData: {
+        salesCount: null,
+        inventoryCount: null,
+        latestInventorySnapshotDate: null,
+      },
       imports: {
         lastStatusSalesImport: null,
         lastStatusInventoryImport: null,
+        lastDosstoreSalesImport: null,
+        lastDosstoreInventoryImport: null,
       },
       duplicateProtection: {
         status: 'enabled',
@@ -119,8 +129,65 @@ router.get('/health', async (req: AuthenticatedRequest, res: Response, next: Nex
     health.imports = {
       lastStatusSalesImport,
       lastStatusInventoryImport,
+      lastDosstoreSalesImport: null,
+      lastDosstoreInventoryImport: null,
     };
     health.duplicateProtection.protectedImports = protectedImports;
+
+    const dosstoreStore = await prisma.store.findFirst({
+      where: {
+        OR: [{ code: 'dosstore' }, { name: 'Dosstore' }],
+      },
+      select: {
+        id: true,
+        name: true,
+        code: true,
+        isActive: true,
+      },
+    });
+
+    if (dosstoreStore) {
+      health.dosstoreStore = dosstoreStore;
+
+      const latestDosstoreSnapshot = await prisma.inventory.findFirst({
+        where: { storeId: dosstoreStore.id },
+        orderBy: { snapshotDate: 'desc' },
+        select: { snapshotDate: true },
+      });
+
+      const [dosstoreSalesCount, dosstoreInventoryCount, lastDosstoreSalesImport, lastDosstoreInventoryImport] =
+        await Promise.all([
+          prisma.sale.count({ where: { storeId: dosstoreStore.id } }),
+          latestDosstoreSnapshot
+            ? prisma.inventory.count({
+                where: {
+                  storeId: dosstoreStore.id,
+                  snapshotDate: latestDosstoreSnapshot.snapshotDate,
+                },
+              })
+            : Promise.resolve(0),
+          prisma.importLog.findFirst({
+            where: { storeId: dosstoreStore.id, sourceType: DOSSTORE_SALES_SOURCE },
+            orderBy: { importedAt: 'desc' },
+            select: importLogSelect,
+          }),
+          prisma.importLog.findFirst({
+            where: { storeId: dosstoreStore.id, sourceType: DOSSTORE_INVENTORY_SOURCE },
+            orderBy: { importedAt: 'desc' },
+            select: importLogSelect,
+          }),
+        ]);
+
+      health.dosstoreData = {
+        salesCount: dosstoreSalesCount,
+        inventoryCount: dosstoreInventoryCount,
+        latestInventorySnapshotDate: latestDosstoreSnapshot?.snapshotDate ?? null,
+      };
+      health.imports.lastDosstoreSalesImport = lastDosstoreSalesImport;
+      health.imports.lastDosstoreInventoryImport = lastDosstoreInventoryImport;
+    } else {
+      health.dosstoreData.message = 'Dosstore store was not found';
+    }
 
     res.json({ data: health });
   } catch (error) {
@@ -162,9 +229,23 @@ interface SystemHealthResponse {
     latestInventorySnapshotDate: Date | null;
     message?: string;
   };
+  dosstoreStore: {
+    id: number;
+    name: string;
+    code: string;
+    isActive: boolean;
+  } | null;
+  dosstoreData: {
+    salesCount: number | null;
+    inventoryCount: number | null;
+    latestInventorySnapshotDate: Date | null;
+    message?: string;
+  };
   imports: {
     lastStatusSalesImport: ImportLogSummary | null;
     lastStatusInventoryImport: ImportLogSummary | null;
+    lastDosstoreSalesImport: ImportLogSummary | null;
+    lastDosstoreInventoryImport: ImportLogSummary | null;
   };
   duplicateProtection: {
     status: 'enabled';
