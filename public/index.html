@@ -324,7 +324,7 @@ function appendQueryParam(query, key, value) {
 }
 
 function fmt(n) { return new Intl.NumberFormat('ru-RU').format(Math.round(n)); }
-function fmtMoney(n) { return new Intl.NumberFormat('ru-RU', {style:'currency',currency:'RUB',maximumFractionDigits:0}).format(n); }
+function fmtMoney(n) { return `${new Intl.NumberFormat('ru-RU', {maximumFractionDigits:0}).format(n)} ₸`; }
 function fmtPct(n) { return `${n.toFixed(1)}%`; }
 function fmtCount(n) { return n === null || n === undefined ? '—' : fmt(n); }
 function fmtDateTime(value) { return value ? new Date(value).toLocaleString('ru-RU', {day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit'}) : '—'; }
