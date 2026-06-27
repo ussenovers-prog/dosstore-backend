@@ -34,6 +34,7 @@ model Store {
   expenses    Expense[]
   visitors    Visitor[]
   importLogs  ImportLog[]
+  advertisingExpenses AdvertisingExpense[]
 
   @@map("stores")
 }
@@ -232,6 +233,33 @@ model Expense {
   @@index([category])
   @@index([isRecurring])
   @@map("expenses")
+}
+
+// ============================================================
+// ADVERTISING EXPENSES
+// ============================================================
+
+model AdvertisingExpense {
+  id          Int      @id @default(autoincrement())
+  date        DateTime
+  storeId     Int?
+  storeName   String
+  platform    String
+  source      String
+  amount      Float
+  currency    String
+  description String?
+  fileName    String
+  fileHash    String
+  createdAt   DateTime @default(now())
+
+  store Store? @relation(fields: [storeId], references: [id], onDelete: SetNull)
+
+  @@unique([fileHash, date, storeName, source])
+  @@index([date])
+  @@index([storeId])
+  @@index([fileHash])
+  @@map("advertising_expenses")
 }
 
 // ============================================================
