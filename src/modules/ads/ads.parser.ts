@@ -20,39 +20,70 @@ export interface ParsedAdvertisingExpense {
   description: string;
 }
 
+export class AdsImportError extends Error {
+  constructor(
+    public readonly code: 'WRONG_FILE' | 'SHEET_NOT_FOUND' | 'NO_ADS_ROWS' | 'ADS_PARSE_ERROR',
+    message: string,
+    public readonly statusCode = 400
+  ) {
+    super(message);
+    this.name = 'AdsImportError';
+  }
+}
+
 export function calculateAdsFileHash(fileBuffer: Buffer) {
   return createHash('sha256').update(fileBuffer).digest('hex');
 }
 
 export function parseAdvertisingExpenses(fileBuffer: Buffer): ParsedAdvertisingExpense[] {
-  const workbook = XLSX.read(fileBuffer, { type: 'buffer', cellDates: false });
-  const sheet = workbook.Sheets[ADS_SHEET_NAME];
+  let workbook: XLSX.WorkBook;
+  try {
+    workbook = XLSX.read(fileBuffer, { type: 'buffer', cellDates: true });
+  } catch {
+    throw new AdsImportError('WRONG_FILE', 'File is not a valid XLS or XLSX workbook');
+  }
+
+  const sheetName = workbook.SheetNames.find((name) => normalize(name) === ADS_SHEET_NAME);
+  const sheet = sheetName ? workbook.Sheets[sheetName] : null;
 
   if (!sheet) {
-    throw new Error(`Sheet "${ADS_SHEET_NAME}" not found`);
+    throw new AdsImportError('SHEET_NOT_FOUND', `Sheet "${ADS_SHEET_NAME}" not found`);
   }
 
   const rows = XLSX.utils.sheet_to_json<unknown[]>(sheet, {
     header: 1,
-    raw: false,
+    raw: true,
     defval: null,
   });
   const expenses: ParsedAdvertisingExpense[] = [];
+  let recognizedBlocks = 0;
 
   for (let rowIndex = 0; rowIndex < rows.length; rowIndex += 1) {
-    const title = text(rows[rowIndex]?.[0]);
+    const title = findBlockTitle(rows[rowIndex]);
     const block = BLOCKS[title];
     if (!block) continue;
+    recognizedBlocks += 1;
 
-    const dateRow = findMetricRow(rows, rowIndex + 1, 'Дата');
-    const amountRow = findMetricRow(rows, rowIndex + 1, 'Сумма затрат');
-    if (!dateRow || !amountRow) continue;
+    const dateMetric = findMetricRow(rows, rowIndex + 1, 'Дата');
+    const amountMetric = findMetricRow(rows, rowIndex + 1, 'Сумма затрат');
+    if (!dateMetric) {
+      throw parseError(title, rowIndex, 'row "Дата" not found');
+    }
+    if (!amountMetric) {
+      throw parseError(title, rowIndex, 'row "Сумма затрат" not found');
+    }
 
-    const columnCount = Math.max(dateRow.length, amountRow.length);
-    for (let column = 2; column < columnCount; column += 1) {
-      const date = parseDate(dateRow[column]);
-      const amount = parseAmount(amountRow[column]);
-      if (!date || amount === null || amount <= 0) continue;
+    const columnCount = Math.max(dateMetric.row.length, amountMetric.row.length);
+    for (let column = dateMetric.labelColumn + 1; column < columnCount; column += 1) {
+      const date = parseDate(dateMetric.row[column]);
+      if (!date) continue;
+
+      const amountValue = amountMetric.row[column];
+      const amount = parseAmount(amountValue);
+      if (amount === null && text(amountValue)) {
+        throw parseError(title, amountMetric.rowIndex, `invalid amount in column ${column + 1}`);
+      }
+      if (amount === null || amount <= 0) continue;
 
       expenses.push({
         date,
@@ -68,7 +99,12 @@ export function parseAdvertisingExpenses(fileBuffer: Buffer): ParsedAdvertisingE
   }
 
   if (expenses.length === 0) {
-    throw new Error(`No advertising expenses found in sheet "${ADS_SHEET_NAME}"`);
+    const suffix = recognizedBlocks === 0 ? ': supported blocks were not found' : '';
+    throw new AdsImportError(
+      'NO_ADS_ROWS',
+      `No advertising expense rows found in sheet "${ADS_SHEET_NAME}"${suffix}`,
+      422
+    );
   }
 
   return expenses;
@@ -76,20 +112,38 @@ export function parseAdvertisingExpenses(fileBuffer: Buffer): ParsedAdvertisingE
 
 function findMetricRow(rows: unknown[][], start: number, metric: string) {
   for (let index = start; index < Math.min(rows.length, start + 12); index += 1) {
-    const label = text(rows[index]?.[0]);
-    if (BLOCKS[label]) return null;
-    if (label === metric) return rows[index];
+    if (findBlockTitle(rows[index])) return null;
+    const labelColumn = rows[index]?.findIndex((cell) => normalize(cell) === metric) ?? -1;
+    if (labelColumn >= 0) {
+      return { row: rows[index], rowIndex: index, labelColumn };
+    }
   }
   return null;
 }
 
 function parseDate(value: unknown) {
-  const match = text(value).match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
-  if (!match) return null;
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return new Date(Date.UTC(value.getFullYear(), value.getMonth(), value.getDate()));
+  }
+  if (typeof value === 'number') {
+    const parsed = XLSX.SSF.parse_date_code(value);
+    return parsed ? new Date(Date.UTC(parsed.y, parsed.m - 1, parsed.d)) : null;
+  }
 
-  const [, day, month, year] = match;
-  const date = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day)));
-  return Number.isNaN(date.getTime()) ? null : date;
+  const valueText = text(value);
+  const ruMatch = valueText.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
+  if (ruMatch) {
+    return utcDate(Number(ruMatch[3]), Number(ruMatch[2]), Number(ruMatch[1]));
+  }
+  const isoMatch = valueText.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (isoMatch) {
+    return utcDate(Number(isoMatch[1]), Number(isoMatch[2]), Number(isoMatch[3]));
+  }
+  const slashMatch = valueText.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (slashMatch) {
+    return utcDate(Number(slashMatch[3]), Number(slashMatch[1]), Number(slashMatch[2]));
+  }
+  return null;
 }
 
 function parseAmount(value: unknown) {
@@ -106,4 +160,26 @@ function parseAmount(value: unknown) {
 
 function text(value: unknown) {
   return value === null || value === undefined ? '' : String(value).trim();
+}
+
+function normalize(value: unknown) {
+  return text(value).replace(/\s+/g, ' ');
+}
+
+function findBlockTitle(row: unknown[] | undefined) {
+  if (!row) return '';
+  return row.map(normalize).find((value) => BLOCKS[value]) ?? '';
+}
+
+function utcDate(year: number, month: number, day: number) {
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function parseError(block: string, rowIndex: number, detail: string) {
+  return new AdsImportError(
+    'ADS_PARSE_ERROR',
+    `Ads parse error in block "${block}", row ${rowIndex + 1}: ${detail}`,
+    422
+  );
 }
