@@ -502,8 +502,8 @@ async function renderSales(el) {
       </div>
     </div>
     <div class="flex gap-3 mb-4">
-      <button onclick="openBeksarImportModal('sales')" class="btn-primary px-4 py-2 rounded-lg text-white text-xs font-medium">+ Импорт продаж Status</button>
-      <button onclick="openBeksarImportModal('inventory')" class="btn-primary px-4 py-2 rounded-lg text-white text-xs font-medium">+ Импорт остатков Status</button>
+      <button data-beksar-import="sales" class="btn-primary px-4 py-2 rounded-lg text-white text-xs font-medium">+ Импорт продаж Status</button>
+      <button data-beksar-import="inventory" class="btn-primary px-4 py-2 rounded-lg text-white text-xs font-medium">+ Импорт остатков Status</button>
     </div>
     <div class="bg-surface-800 rounded-xl border border-surface-700 p-4">
       <h3 class="text-sm font-semibold text-white mb-3">Сравнение магазинов</h3>
@@ -896,7 +896,7 @@ async function renderImports(el) {
       </div>
     </div>
     <div class="flex justify-end mb-4">
-      <button onclick="openBeksarAutoImportModal()" class="btn-primary px-4 py-2 rounded-lg text-white text-xs font-medium">Авто-импорт Beksar</button>
+      <button data-beksar-auto-open class="btn-primary px-4 py-2 rounded-lg text-white text-xs font-medium">Авто-импорт Beksar</button>
     </div>
     <div class="bg-surface-800 rounded-xl border border-surface-700 p-4">
       <div class="flex items-center justify-between mb-4">
@@ -998,14 +998,16 @@ function openBeksarAutoImportModal() {
         <div id="beksarAutoResult" class="hidden space-y-4"></div>
         <div class="flex gap-2 pt-2">
           <button type="submit" class="btn-primary flex-1 py-2 rounded-lg text-white text-sm font-medium">Анализировать</button>
-          <button type="button" id="beksarAutoImportButton" onclick="submitBeksarAutoImport()" class="btn-primary flex-1 py-2 rounded-lg text-white text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed" disabled>Импортировать</button>
-          <button type="button" onclick="closeModal()" class="flex-1 py-2 rounded-lg text-surface-200 bg-surface-700 text-sm">Отмена</button>
+          <button type="button" id="beksarAutoImportButton" class="btn-primary flex-1 py-2 rounded-lg text-white text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed" disabled>Импортировать</button>
+          <button type="button" id="beksarAutoCancelButton" class="flex-1 py-2 rounded-lg text-surface-200 bg-surface-700 text-sm">Отмена</button>
         </div>
       </form>
     </div>
   `);
 
   document.getElementById('beksarAutoAnalyzeForm').addEventListener('submit', analyzeBeksarAutoImport);
+  document.getElementById('beksarAutoImportButton').addEventListener('click', submitBeksarAutoImport);
+  document.getElementById('beksarAutoCancelButton').addEventListener('click', closeModal);
 }
 
 async function analyzeBeksarAutoImport(event) {
@@ -1080,7 +1082,7 @@ function renderBeksarAutoAnalysis(data) {
     <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
       <div>
         <label class="block text-xs text-surface-200 mb-1">Тип файла</label>
-        <select id="beksarAutoType" onchange="refreshBeksarAutoAnalysis()" class="input-dark w-full px-3 py-2 rounded-lg text-sm">
+        <select id="beksarAutoType" class="input-dark w-full px-3 py-2 rounded-lg text-sm">
           <option value="" ${selectedType ? '' : 'selected'}>Выберите тип</option>
           <option value="sales" ${selectedType === 'sales' ? 'selected' : ''}>Продажи</option>
           <option value="inventory" ${selectedType === 'inventory' ? 'selected' : ''}>Остатки</option>
@@ -1088,7 +1090,7 @@ function renderBeksarAutoAnalysis(data) {
       </div>
       <div>
         <label class="block text-xs text-surface-200 mb-1">Магазин</label>
-        <select id="beksarAutoStore" onchange="refreshBeksarAutoAnalysis()" class="input-dark w-full px-3 py-2 rounded-lg text-sm">
+        <select id="beksarAutoStore" class="input-dark w-full px-3 py-2 rounded-lg text-sm">
           <option value="" ${selectedStore ? '' : 'selected'}>Выберите магазин</option>
           <option value="2" ${selectedStore === '2' ? 'selected' : ''}>Status</option>
           <option value="1" ${selectedStore === '1' ? 'selected' : ''}>Dosstore</option>
@@ -1111,6 +1113,8 @@ function renderBeksarAutoAnalysis(data) {
     </div>
   `;
   resultEl.classList.remove('hidden');
+  document.getElementById('beksarAutoType').addEventListener('change', refreshBeksarAutoAnalysis);
+  document.getElementById('beksarAutoStore').addEventListener('change', refreshBeksarAutoAnalysis);
   importButton.disabled = !selectedType || !selectedStore || duplicate.status === 'duplicate';
 }
 
@@ -1177,13 +1181,14 @@ function openBeksarImportModal(type) {
         <div id="beksarImportError" class="hidden text-danger-400 text-sm bg-danger-500/10 border border-danger-500/20 rounded-lg px-4 py-3"></div>
         <div class="flex gap-2 pt-2">
           <button type="submit" class="btn-primary flex-1 py-2 rounded-lg text-white text-sm font-medium">Импортировать</button>
-          <button type="button" onclick="closeModal()" class="flex-1 py-2 rounded-lg text-surface-200 bg-surface-700 text-sm">Отмена</button>
+          <button type="button" id="beksarImportCancelButton" class="flex-1 py-2 rounded-lg text-surface-200 bg-surface-700 text-sm">Отмена</button>
         </div>
       </form>
     </div>
   `);
 
   document.getElementById('beksarImportForm').addEventListener('submit', submitBeksarImport);
+  document.getElementById('beksarImportCancelButton').addEventListener('click', closeModal);
 }
 
 async function submitBeksarImport(event) {
@@ -1499,6 +1504,20 @@ function openModal(html) {
 function closeModal() {
   document.getElementById('modalOverlay').classList.add('hidden');
 }
+document.addEventListener('click', (event) => {
+  if (!(event.target instanceof Element)) return;
+
+  const autoImportButton = event.target.closest('[data-beksar-auto-open]');
+  if (autoImportButton) {
+    openBeksarAutoImportModal();
+    return;
+  }
+
+  const manualImportButton = event.target.closest('[data-beksar-import]');
+  if (manualImportButton) {
+    openBeksarImportModal(manualImportButton.dataset.beksarImport);
+  }
+});
 document.getElementById('modalOverlay').addEventListener('click', (e) => {
   if (e.target === e.currentTarget) closeModal();
 });
