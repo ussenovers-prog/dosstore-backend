@@ -18,7 +18,68 @@ export class DuplicateImportError extends Error {
   }
 }
 
+export type BeksarAutoType = 'sales' | 'inventory' | 'unknown';
+export type BeksarAutoStore = 'status' | 'dosstore' | 'unknown';
+
+interface AnalyzeOptions {
+  type?: BeksarAutoType;
+  storeId?: number;
+}
+
+type SalesParseAttempt = {
+  data: ReturnType<typeof parseSalesFile> | null;
+  error: string | null;
+};
+
+type InventoryParseAttempt = {
+  data: ReturnType<typeof parseInventoryFile> | null;
+  error: string | null;
+};
+
+type DuplicateImport = {
+  id: number;
+  fileName: string;
+  importedAt: Date;
+} | null;
+
 class BeksarService {
+  async analyzeFile(fileName: string, fileBuffer: Buffer, options: AnalyzeOptions = {}) {
+    const fileHash = calculateFileHash(fileBuffer);
+    const salesParse = this.tryParseSales(fileBuffer);
+    const inventoryParse = this.tryParseInventory(fileBuffer);
+    const detectedType = options.type && options.type !== 'unknown'
+      ? options.type
+      : this.detectType(salesParse, inventoryParse);
+    const detectedStore = this.detectStore(fileName, options.storeId);
+    const sourceType = this.sourceTypeFor(detectedType);
+    const storeId = this.storeIdFor(detectedStore);
+    const duplicate = sourceType && storeId
+      ? await this.findDuplicateImport(fileHash, storeId, sourceType)
+      : null;
+
+    return {
+      fileName,
+      detectedType,
+      detectedStore,
+      detectedDate: detectedType === 'sales'
+        ? salesParse.data?.reportDate ?? null
+        : detectedType === 'inventory'
+          ? inventoryParse.data?.snapshotDate ?? null
+          : null,
+      duplicateStatus: this.getDuplicateStatus(duplicate, detectedType, detectedStore),
+      rows: {
+        sales: salesParse.data?.sales.length ?? 0,
+        inventory: inventoryParse.data?.items.length ?? 0,
+      },
+      needsTypeSelection: detectedType === 'unknown',
+      needsStoreSelection: detectedStore === 'unknown',
+      errors: {
+        sales: salesParse.error,
+        inventory: inventoryParse.error,
+      },
+    };
+  }
+
   async importStatusSales(fileName: string, fileBuffer: Buffer) {
     const fileHash = calculateFileHash(fileBuffer);
     await this.assertNotImported(fileHash, STATUS_STORE_ID, STATUS_SALES_SOURCE);
@@ -130,17 +191,21 @@ class BeksarService {
   }
 
   private async assertNotImported(fileHash: string, storeId: number, sourceType: string) {
-    const existing = await prisma.importLog.findFirst({
+    const existing = await this.findDuplicateImport(fileHash, storeId, sourceType);
+
+    if (existing) throw new DuplicateImportError();
+  }
+
+  private async findDuplicateImport(fileHash: string, storeId: number, sourceType: string) {
+    return prisma.importLog.findFirst({
       where: {
         fileHash,
         storeId,
         sourceType,
         status: { in: ['success', 'partial'] },
       },
-      select: { id: true },
+      select: { id: true, fileName: true, importedAt: true },
     });
-
-    if (existing) throw new DuplicateImportError();
   }
 
   private async upsertSale(tx: PrismaExecutor, sale: ParsedBeksarSale, fileHash: string) {
@@ -256,6 +321,91 @@ class BeksarService {
     if (recordsFailed === 0) return 'success';
     if (recordsProcessed > 0) return 'partial';
     return 'error';
+  }
+
+  private tryParseSales(fileBuffer: Buffer): SalesParseAttempt {
+    try {
+      return { data: parseSalesFile(fileBuffer), error: null };
+    } catch (error) {
+      return { data: null, error: error instanceof Error ? error.message : 'Sales parse failed' };
+    }
+  }
+
+  private tryParseInventory(fileBuffer: Buffer): InventoryParseAttempt {
+    try {
+      return { data: parseInventoryFile(fileBuffer), error: null };
+    } catch (error) {
+      return { data: null, error: error instanceof Error ? error.message : 'Inventory parse failed' };
+    }
+  }
+
+  private detectType(
+    salesParse: SalesParseAttempt,
+    inventoryParse: InventoryParseAttempt
+  ): BeksarAutoType {
+    const hasSales = (salesParse.data?.sales.length ?? 0) > 0;
+    const hasInventory = (inventoryParse.data?.items.length ?? 0) > 0;
+
+    if (hasSales && !hasInventory) return 'sales';
+    if (hasInventory && !hasSales) return 'inventory';
+    return 'unknown';
+  }
+
+  private detectStore(fileName: string, storeId?: number): BeksarAutoStore {
+    if (storeId === STATUS_STORE_ID) return 'status';
+    if (storeId === 1) return 'dosstore';
+
+    const lowerName = fileName.toLowerCase();
+    if (lowerName.includes('status')) return 'status';
+    if (lowerName.includes('dosstore') || lowerName.includes('dos store')) return 'dosstore';
+    return 'unknown';
+  }
+
+  private sourceTypeFor(type: BeksarAutoType) {
+    if (type === 'sales') return STATUS_SALES_SOURCE;
+    if (type === 'inventory') return STATUS_INVENTORY_SOURCE;
+    return null;
+  }
+
+  private storeIdFor(store: BeksarAutoStore) {
+    if (store === 'status') return STATUS_STORE_ID;
+    if (store === 'dosstore') return 1;
+    return null;
+  }
+
+  private getDuplicateStatus(
+    duplicate: DuplicateImport,
+    type: BeksarAutoType,
+    store: BeksarAutoStore
+  ) {
+    if (type === 'unknown' || store === 'unknown') {
+      return {
+        status: 'unknown',
+        message: 'Choose file type and store to check duplicates.',
+      };
+    }
+
+    if (store === 'dosstore') {
+      return {
+        status: 'not_configured',
+        message: 'Dosstore import not configured yet.',
+      };
+    }
+
+    if (duplicate) {
+      return {
+        status: 'duplicate',
+        message: 'This Status file was already imported.',
+        importLogId: duplicate.id,
+        fileName: duplicate.fileName,
+        importedAt: duplicate.importedAt,
+      };
+    }
+
+    return {
+      status: 'new',
+      message: 'No duplicate import found for Status.',
+    };
   }
 }
 
