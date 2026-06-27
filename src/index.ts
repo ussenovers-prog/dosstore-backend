@@ -21,6 +21,7 @@ import dashboardRoutes from './modules/dashboard/dashboard.routes.js';
 import importsRoutes from './modules/imports/imports.routes.js';
 import beksarRoutes from './modules/beksar/beksar.routes.js';
 import systemRoutes from './modules/system/system.routes.js';
+import adsRoutes from './modules/ads/ads.routes.js';
 
 // Import services (optional background tasks)
 // import { ftpWatcher } from './services/ftp/ftp-watcher.service.js';
@@ -68,6 +69,7 @@ app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/imports', importsRoutes);
 app.use('/api/beksar', beksarRoutes);
 app.use('/api/system', systemRoutes);
+app.use('/api/ads', adsRoutes);
 
 // ============================================================
 // Static Frontend (SPA)
