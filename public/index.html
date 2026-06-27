@@ -617,6 +617,32 @@ async function renderInventory(el) {
 }
 async function renderExpenses(el) {
   el.innerHTML = `<div class="fade-in">
+    <div class="flex items-center justify-between gap-3 mb-4">
+      <h2 class="text-base font-semibold text-white">Рекламные расходы</h2>
+      <button onclick="openAdsImportModal()" class="btn-primary px-4 py-2 rounded-lg text-white text-xs font-medium">+ Импорт рекламы Excel</button>
+    </div>
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+      <div class="bg-surface-800 rounded-xl border border-surface-700 p-4">
+        <p class="text-xs text-surface-200 mb-1">Всего рекламы</p>
+        <p class="text-xl font-bold text-white" id="adsTotal">—</p>
+      </div>
+      <div class="bg-surface-800 rounded-xl border border-surface-700 p-4">
+        <p class="text-xs text-surface-200 mb-1">Status реклама</p>
+        <p class="text-xl font-bold text-brand-400" id="adsStatus">—</p>
+      </div>
+      <div class="bg-surface-800 rounded-xl border border-surface-700 p-4">
+        <p class="text-xs text-surface-200 mb-1">Dosstore реклама</p>
+        <p class="text-xl font-bold text-success-400" id="adsDosstore">—</p>
+      </div>
+    </div>
+    <div class="bg-surface-800 rounded-xl border border-surface-700 p-4 mb-6">
+      <div class="overflow-x-auto max-h-80">
+        <table class="table-dark w-full text-sm">
+          <thead><tr><th class="text-left px-3 py-2 text-xs text-surface-200 font-medium">Дата</th><th class="text-left px-3 py-2 text-xs text-surface-200 font-medium">Магазин</th><th class="text-left px-3 py-2 text-xs text-surface-200 font-medium">Источник</th><th class="text-left px-3 py-2 text-xs text-surface-200 font-medium">Платформа</th><th class="text-right px-3 py-2 text-xs text-surface-200 font-medium">Сумма</th><th class="text-left px-3 py-2 text-xs text-surface-200 font-medium">Описание</th></tr></thead>
+          <tbody id="adsExpensesTable"></tbody>
+        </table>
+      </div>
+    </div>
     <div class="flex items-center justify-between mb-4">
       <div class="flex gap-2 flex-wrap">
         <select id="expCatFilter" class="input-dark text-xs px-3 py-1.5 rounded-lg" onchange="loadExpenses()">
@@ -648,10 +674,28 @@ async function renderExpenses(el) {
   </div>`;
 
   const f = getFilters();
-  const [expList, expBreak] = await Promise.all([
+  const [expList, expBreak, adsList, adsSummary] = await Promise.all([
     api.get(`/expenses${f}`),
     api.get(`/dashboard/expense-breakdown${f}`),
+    api.get('/ads'),
+    api.get('/ads/summary'),
   ]);
+
+  const ads = adsList.data || [];
+  const adsTotals = adsSummary.data || {};
+  document.getElementById('adsTotal').textContent = fmtMoney(adsTotals.totalAds || 0);
+  document.getElementById('adsStatus').textContent = fmtMoney(adsTotals.statusAds || 0);
+  document.getElementById('adsDosstore').textContent = fmtMoney(adsTotals.dosstoreAds || 0);
+  document.getElementById('adsExpensesTable').innerHTML = ads.length ? ads.map(item => `
+    <tr>
+      <td class="px-3 py-2 text-white">${new Date(item.date).toLocaleDateString('ru-RU')}</td>
+      <td class="px-3 py-2 text-surface-200">${escapeHtml(item.storeName)}</td>
+      <td class="px-3 py-2 text-surface-200">${item.source === 'engagement' ? 'Вовлечение' : 'Трафик'}</td>
+      <td class="px-3 py-2 text-surface-200">${escapeHtml(item.platform)}</td>
+      <td class="px-3 py-2 text-right text-white font-medium">${fmtMoney(item.amount)}</td>
+      <td class="px-3 py-2 text-surface-200">${escapeHtml(item.description || '—')}</td>
+    </tr>
+  `).join('') : '<tr><td colspan="6" class="px-3 py-6 text-center text-surface-200">Рекламные расходы ещё не импортированы</td></tr>';
 
   const catNames = { salary:'Зарплаты', rent:'Аренда', utilities:'Коммунальные', target_ads:'Реклама', other:'Прочее' };
   const catColors = { salary:'#38bdf8', rent:'#a78bfa', utilities:'#4ade80', target_ads:'#fbbf24', other:'#f87171' };
@@ -677,6 +721,59 @@ async function renderExpenses(el) {
       </td>
     </tr>
   `).join('') : '<tr><td colspan="5" class="px-3 py-6 text-center text-surface-200">Нет расходов</td></tr>';
+}
+
+function openAdsImportModal() {
+  openModal(`
+    <div class="p-6">
+      <h3 class="text-lg font-bold text-white mb-4">Импорт рекламы Excel</h3>
+      <form id="adsImportForm" class="space-y-4">
+        <div>
+          <label class="block text-xs text-surface-200 mb-1">Файл XLS/XLSX</label>
+          <input type="file" id="adsImportFile" accept=".xls,.xlsx" class="input-dark w-full px-3 py-2 rounded-lg text-sm" required>
+        </div>
+        <p class="text-xs text-surface-200">Будет импортирован только лист 06.2026.</p>
+        <div id="adsImportError" class="hidden text-danger-400 text-sm bg-danger-500/10 border border-danger-500/20 rounded-lg px-4 py-3"></div>
+        <div class="flex gap-2 pt-2">
+          <button type="submit" class="btn-primary flex-1 py-2 rounded-lg text-white text-sm font-medium">Импортировать</button>
+          <button type="button" onclick="closeModal()" class="flex-1 py-2 rounded-lg text-surface-200 bg-surface-700 text-sm">Отмена</button>
+        </div>
+      </form>
+    </div>
+  `);
+  document.getElementById('adsImportForm').addEventListener('submit', submitAdsImport);
+}
+
+async function submitAdsImport(event) {
+  event.preventDefault();
+  const fileInput = document.getElementById('adsImportFile');
+  const errorEl = document.getElementById('adsImportError');
+  errorEl.classList.add('hidden');
+
+  if (!fileInput.files.length) {
+    errorEl.textContent = 'Выберите файл';
+    errorEl.classList.remove('hidden');
+    return;
+  }
+
+  const formData = new FormData();
+  formData.append('file', fileInput.files[0]);
+
+  try {
+    const response = await fetch(`${API_BASE}/ads/import`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${api.token}` },
+      body: formData,
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error?.message || 'Import failed');
+
+    closeModal();
+    await renderExpenses(document.getElementById('pageContent'));
+  } catch (error) {
+    errorEl.textContent = error.message;
+    errorEl.classList.remove('hidden');
+  }
 }
 
 function openExpenseModal() {
