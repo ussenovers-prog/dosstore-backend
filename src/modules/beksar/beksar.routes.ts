@@ -23,6 +23,24 @@ const upload = multer({
 
 router.use(authMiddleware);
 
+router.post('/analyze', upload.single('file'), async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    if (!req.file) {
+      res.status(400).json({ error: { code: 'FILE_REQUIRED', message: 'File is required' } });
+      return;
+    }
+
+    const result = await beksarService.analyzeFile(req.file.originalname, req.file.buffer, {
+      type: parseAutoType(req.body.type),
+      storeId: parseStoreId(req.body.storeId),
+    });
+
+    res.json({ data: result });
+  } catch (error) {
+    handleImportError(error, res, next);
+  }
+});
+
 router.post('/import/sales', upload.single('file'), async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     const guard = validateStatusUpload(req);
@@ -53,6 +71,47 @@ router.post('/import/inventory', upload.single('file'), async (req: Authenticate
   }
 });
 
+router.post('/import/auto', upload.single('file'), async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    if (!req.file) {
+      res.status(400).json({ error: { code: 'FILE_REQUIRED', message: 'File is required' } });
+      return;
+    }
+
+    const type = parseAutoType(req.body.type);
+    const storeId = parseStoreId(req.body.storeId);
+
+    if (type !== 'sales' && type !== 'inventory') {
+      res.status(400).json({ error: { code: 'TYPE_REQUIRED', message: 'Choose sales or inventory import type' } });
+      return;
+    }
+
+    if (!storeId) {
+      res.status(400).json({ error: { code: 'STORE_REQUIRED', message: 'Choose Status or Dosstore' } });
+      return;
+    }
+
+    if (storeId !== STATUS_STORE_ID) {
+      res.status(400).json({ error: { code: 'DOSSTORE_NOT_CONFIGURED', message: 'Dosstore import not configured yet' } });
+      return;
+    }
+
+    const guard = validateStatusUpload(req);
+    if (guard) {
+      res.status(guard.status).json({ error: { code: guard.code, message: guard.message } });
+      return;
+    }
+
+    const result = type === 'sales'
+      ? await beksarService.importStatusSales(req.file.originalname, req.file.buffer)
+      : await beksarService.importStatusInventory(req.file.originalname, req.file.buffer);
+
+    res.json({ data: result });
+  } catch (error) {
+    handleImportError(error, res, next);
+  }
+});
+
 router.use((error: unknown, req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   handleImportError(error, res, next);
 });
@@ -72,6 +131,15 @@ function validateStatusUpload(req: AuthenticatedRequest) {
   }
 
   return null;
+}
+
+function parseAutoType(value: unknown) {
+  return value === 'sales' || value === 'inventory' ? value : undefined;
+}
+
+function parseStoreId(value: unknown) {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;
 }
 
 function handleImportError(error: unknown, res: Response, next: NextFunction) {
