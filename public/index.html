@@ -895,7 +895,9 @@ async function renderImports(el) {
         <p class="text-xl font-bold text-warn-400" id="importPartial">—</p>
       </div>
     </div>
-    <div class="flex justify-end mb-4">
+    <div class="flex flex-wrap gap-3 mb-4">
+      <button data-beksar-import="sales" class="btn-primary px-4 py-2 rounded-lg text-white text-xs font-medium">+ Импорт продаж</button>
+      <button data-beksar-import="inventory" class="btn-primary px-4 py-2 rounded-lg text-white text-xs font-medium">+ Импорт остатков</button>
       <button data-beksar-auto-open class="btn-primary px-4 py-2 rounded-lg text-white text-xs font-medium">Авто-импорт Beksar</button>
     </div>
     <div class="bg-surface-800 rounded-xl border border-surface-700 p-4">
