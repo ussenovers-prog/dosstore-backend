@@ -895,6 +895,9 @@ async function renderImports(el) {
         <p class="text-xl font-bold text-warn-400" id="importPartial">—</p>
       </div>
     </div>
+    <div class="flex justify-end mb-4">
+      <button onclick="openBeksarAutoImportModal()" class="btn-primary px-4 py-2 rounded-lg text-white text-xs font-medium">Авто-импорт Beksar</button>
+    </div>
     <div class="bg-surface-800 rounded-xl border border-surface-700 p-4">
       <div class="flex items-center justify-between mb-4">
         <h3 class="text-sm font-semibold text-white">Журнал импортов</h3>
@@ -980,6 +983,179 @@ async function loadImportsList() {
       <td class="px-3 py-2 text-xs ${imp.recordsFailed > 0 ? 'text-danger-400' : 'text-surface-200'}">${imp.recordsFailed > 0 ? imp.recordsFailed : '—'}${imp.errorMessage ? ` <span class="text-surface-200" title="${imp.errorMessage}">ⓘ</span>` : ''}</td>
     </tr>
   `).join('') : '<tr><td colspan="7" class="px-3 py-6 text-center text-surface-200">Нет импортов</td></tr>';
+}
+
+function openBeksarAutoImportModal() {
+  openModal(`
+    <div class="p-6">
+      <h3 class="text-lg font-bold text-white mb-4">Авто-импорт Beksar</h3>
+      <form id="beksarAutoAnalyzeForm" class="space-y-4">
+        <div>
+          <label class="block text-xs text-surface-200 mb-1">Файл XLS/XLSX</label>
+          <input type="file" id="beksarAutoFile" accept=".xls,.xlsx" class="input-dark w-full px-3 py-2 rounded-lg text-sm" required>
+        </div>
+        <div id="beksarAutoError" class="hidden text-danger-400 text-sm bg-danger-500/10 border border-danger-500/20 rounded-lg px-4 py-3"></div>
+        <div id="beksarAutoResult" class="hidden space-y-4"></div>
+        <div class="flex gap-2 pt-2">
+          <button type="submit" class="btn-primary flex-1 py-2 rounded-lg text-white text-sm font-medium">Анализировать</button>
+          <button type="button" id="beksarAutoImportButton" onclick="submitBeksarAutoImport()" class="btn-primary flex-1 py-2 rounded-lg text-white text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed" disabled>Импортировать</button>
+          <button type="button" onclick="closeModal()" class="flex-1 py-2 rounded-lg text-surface-200 bg-surface-700 text-sm">Отмена</button>
+        </div>
+      </form>
+    </div>
+  `);
+
+  document.getElementById('beksarAutoAnalyzeForm').addEventListener('submit', analyzeBeksarAutoImport);
+}
+
+async function analyzeBeksarAutoImport(event) {
+  event.preventDefault();
+  await runBeksarAutoAnalyze(false);
+}
+
+async function refreshBeksarAutoAnalysis() {
+  await runBeksarAutoAnalyze(true);
+}
+
+async function runBeksarAutoAnalyze(useSelections) {
+  const fileInput = document.getElementById('beksarAutoFile');
+  const errorEl = document.getElementById('beksarAutoError');
+  const resultEl = document.getElementById('beksarAutoResult');
+  const importButton = document.getElementById('beksarAutoImportButton');
+
+  errorEl.classList.add('hidden');
+  importButton.disabled = true;
+
+  if (!fileInput.files.length) {
+    errorEl.textContent = 'Выберите файл';
+    errorEl.classList.remove('hidden');
+    return;
+  }
+
+  const formData = new FormData();
+  formData.append('file', fileInput.files[0]);
+
+  if (useSelections) {
+    const type = document.getElementById('beksarAutoType')?.value;
+    const storeId = document.getElementById('beksarAutoStore')?.value;
+    if (type) formData.append('type', type);
+    if (storeId) formData.append('storeId', storeId);
+  }
+
+  try {
+    const result = await postBeksarFile('/beksar/analyze', formData);
+    renderBeksarAutoAnalysis(result.data);
+  } catch (error) {
+    resultEl.classList.add('hidden');
+    errorEl.textContent = error.message;
+    errorEl.classList.remove('hidden');
+  }
+}
+
+function renderBeksarAutoAnalysis(data) {
+  const resultEl = document.getElementById('beksarAutoResult');
+  const importButton = document.getElementById('beksarAutoImportButton');
+  const duplicate = data.duplicateStatus || { status: 'unknown', message: '' };
+  const duplicateLabels = {
+    new: 'Новый файл',
+    duplicate: 'Дубликат',
+    unknown: 'Нужно выбрать тип и магазин',
+    not_configured: 'Dosstore не настроен'
+  };
+  const duplicateStyles = {
+    new: 'bg-success-500/10 text-success-400',
+    duplicate: 'bg-danger-500/10 text-danger-400',
+    unknown: 'bg-warn-500/10 text-warn-400',
+    not_configured: 'bg-warn-500/10 text-warn-400'
+  };
+  const selectedType = data.detectedType === 'unknown' ? '' : data.detectedType;
+  const selectedStore = data.detectedStore === 'status'
+    ? '2'
+    : data.detectedStore === 'dosstore'
+      ? '1'
+      : '';
+  const rowCount = selectedType === 'sales' ? data.rows.sales : selectedType === 'inventory' ? data.rows.inventory : 0;
+
+  resultEl.innerHTML = `
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+      <div>
+        <label class="block text-xs text-surface-200 mb-1">Тип файла</label>
+        <select id="beksarAutoType" onchange="refreshBeksarAutoAnalysis()" class="input-dark w-full px-3 py-2 rounded-lg text-sm">
+          <option value="" ${selectedType ? '' : 'selected'}>Выберите тип</option>
+          <option value="sales" ${selectedType === 'sales' ? 'selected' : ''}>Продажи</option>
+          <option value="inventory" ${selectedType === 'inventory' ? 'selected' : ''}>Остатки</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-xs text-surface-200 mb-1">Магазин</label>
+        <select id="beksarAutoStore" onchange="refreshBeksarAutoAnalysis()" class="input-dark w-full px-3 py-2 rounded-lg text-sm">
+          <option value="" ${selectedStore ? '' : 'selected'}>Выберите магазин</option>
+          <option value="2" ${selectedStore === '2' ? 'selected' : ''}>Status</option>
+          <option value="1" ${selectedStore === '1' ? 'selected' : ''}>Dosstore</option>
+        </select>
+      </div>
+    </div>
+    <div class="grid grid-cols-2 gap-3 text-sm">
+      <div class="bg-surface-700/50 rounded-lg p-3">
+        <p class="text-xs text-surface-200 mb-1">Дата файла</p>
+        <p class="text-white">${data.detectedDate ? fmtDate(data.detectedDate) : 'Не определена'}</p>
+      </div>
+      <div class="bg-surface-700/50 rounded-lg p-3">
+        <p class="text-xs text-surface-200 mb-1">Строк найдено</p>
+        <p class="text-white">${fmtCount(rowCount)}</p>
+      </div>
+    </div>
+    <div class="flex items-start gap-3 rounded-lg border border-surface-700 px-3 py-3">
+      <span class="px-2 py-0.5 rounded-full text-xs whitespace-nowrap ${duplicateStyles[duplicate.status] || duplicateStyles.unknown}">${duplicateLabels[duplicate.status] || duplicateLabels.unknown}</span>
+      <p class="text-xs text-surface-200">${escapeHtml(duplicate.message || '')}</p>
+    </div>
+  `;
+  resultEl.classList.remove('hidden');
+  importButton.disabled = !selectedType || !selectedStore || duplicate.status === 'duplicate';
+}
+
+async function submitBeksarAutoImport() {
+  const fileInput = document.getElementById('beksarAutoFile');
+  const type = document.getElementById('beksarAutoType')?.value;
+  const storeId = document.getElementById('beksarAutoStore')?.value;
+  const errorEl = document.getElementById('beksarAutoError');
+
+  errorEl.classList.add('hidden');
+
+  if (!fileInput.files.length || !type || !storeId) {
+    errorEl.textContent = 'Выберите файл, тип и магазин';
+    errorEl.classList.remove('hidden');
+    return;
+  }
+
+  const formData = new FormData();
+  formData.append('file', fileInput.files[0]);
+  formData.append('type', type);
+  formData.append('storeId', storeId);
+
+  try {
+    await postBeksarFile('/beksar/import/auto', formData);
+    closeModal();
+    renderImports(document.getElementById('pageContent'));
+  } catch (error) {
+    errorEl.textContent = error.message;
+    errorEl.classList.remove('hidden');
+  }
+}
+
+async function postBeksarFile(endpoint, formData) {
+  const res = await fetch(`${API_BASE}${endpoint}`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${api.token}` },
+    body: formData,
+  });
+  const result = await res.json();
+
+  if (!res.ok) {
+    throw new Error(result.error?.message || result.message || 'Request failed');
+  }
+
+  return result;
 }
 
 function openBeksarImportModal(type) {
