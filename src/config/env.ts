@@ -31,6 +31,22 @@ const envSchema = z.object({
   FTP_ARCHIVE_PATH: z.string().default('/archive/'),
   FTP_POLL_INTERVAL_MS: z.coerce.number().int().default(300000),
 
+  // Store-specific Beksar FTP sync
+  FTP_SYNC_ENABLED: z.string().default('false').transform((value) => value.toLowerCase() === 'true'),
+  FTP_SYNC_MIN_FILE_AGE_SECONDS: z.coerce.number().int().nonnegative().default(120),
+  STATUS_FTP_HOST: z.string().optional(),
+  STATUS_FTP_PORT: z.coerce.number().int().positive().default(22),
+  STATUS_FTP_USER: z.string().optional(),
+  STATUS_FTP_PASSWORD: z.string().optional(),
+  STATUS_FTP_PATH: z.string().optional(),
+  STATUS_FTP_PROTOCOL: z.enum(['ftp', 'sftp']).default('sftp'),
+  DOSSTORE_FTP_HOST: z.string().optional(),
+  DOSSTORE_FTP_PORT: z.coerce.number().int().positive().default(22),
+  DOSSTORE_FTP_USER: z.string().optional(),
+  DOSSTORE_FTP_PASSWORD: z.string().optional(),
+  DOSSTORE_FTP_PATH: z.string().optional(),
+  DOSSTORE_FTP_PROTOCOL: z.enum(['ftp', 'sftp']).default('sftp'),
+
   // Google Sheets
   GOOGLE_SHEETS_CREDENTIALS_PATH: z.string().optional(),
   GOOGLE_SHEETS_AD_SPREADSHEET_ID: z.string().optional(),
