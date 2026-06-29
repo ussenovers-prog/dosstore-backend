@@ -4,6 +4,8 @@ import { authMiddleware } from '../../middleware/auth.js';
 import { AuthenticatedRequest } from '../../types/express.d.js';
 import { STATUS_STORE_ID } from './beksar.parser.js';
 import { beksarService, DuplicateImportError } from './beksar.service.js';
+import { beksarFtpService, FtpSyncError } from './beksar.ftp.service.js';
+import { z } from 'zod';
 
 const router = Router();
 
@@ -22,6 +24,40 @@ const upload = multer({
 });
 
 router.use(authMiddleware);
+
+const ftpSyncSchema = z.object({
+  storeId: z.coerce.number().int().refine((value): value is 1 | 2 => value === 1 || value === 2, {
+    message: 'storeId must be 1 or 2',
+  }),
+  mode: z.enum(['sales', 'inventory', 'all']),
+});
+
+router.post('/ftp/sync', async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  const parsed = ftpSyncSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({
+      success: false,
+      code: 'VALIDATION_ERROR',
+      errors: parsed.error.flatten().fieldErrors,
+    });
+    return;
+  }
+
+  try {
+    const result = await beksarFtpService.sync(parsed.data.storeId, parsed.data.mode);
+    res.json(result);
+  } catch (error) {
+    if (error instanceof FtpSyncError) {
+      res.status(error.code === 'FTP_SYNC_DISABLED' ? 503 : 400).json({
+        success: false,
+        code: error.code,
+      });
+      return;
+    }
+
+    next(error);
+  }
+});
 
 router.post('/analyze', upload.single('file'), async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
