@@ -48,6 +48,23 @@ const CATEGORY_NAMES = ['БАТНИК', 'БРЮКИ', 'ОБУВЬ', 'РУБАШ�
 
 type SheetRow = unknown[];
 
+interface InventoryColumns {
+  article: number;
+  barcode: number | null;
+  productName: number;
+  quantity: number;
+  purchasePrice: number | null;
+  salePrice: number | null;
+  totalValue: number | null;
+}
+
+export class BeksarFileValidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'BeksarFileValidationError';
+  }
+}
+
 export function calculateFileHash(buffer: Buffer): string {
   return createHash('sha256').update(buffer).digest('hex');
 }
@@ -105,25 +122,27 @@ export function parseSalesFile(buffer: Buffer): ParsedSalesFile {
   return { reportDate, sales };
 }
 
-export function parseInventoryFile(buffer: Buffer): ParsedInventoryFile {
-  const rows = readFirstSheet(buffer);
-  const headerRowIndex = rows.findIndex((row) => cellText(row[1]) === 'Артикул' && cellText(row[2]) === 'Штрихкод');
+export function parseInventoryFile(buffer: Buffer, fileName?: string): ParsedInventoryFile {
+  const rows = readInventorySheet(buffer);
+  const header = findInventoryHeader(rows);
 
-  if (headerRowIndex === -1) {
-    throw new Error('Inventory header row was not found');
+  if (!header) {
+    throw new BeksarFileValidationError('Inventory header row was not found');
   }
 
-  const snapshotDate = findSnapshotDate(rows.slice(0, headerRowIndex));
+  const snapshotDate =
+    findSnapshotDate(rows.slice(0, header.rowIndex)) ??
+    findSnapshotDateFromFileName(fileName);
   if (!snapshotDate) {
-    throw new Error('Inventory snapshot date was not found');
+    throw new BeksarFileValidationError('Inventory snapshot date was not found');
   }
 
   const items: ParsedBeksarInventoryItem[] = [];
   let category: string | null = null;
 
-  for (let i = headerRowIndex + 1; i < rows.length; i += 1) {
+  for (let i = header.rowIndex + 1; i < rows.length; i += 1) {
     const row = rows[i];
-    const article = cellText(row[1]);
+    const article = cellText(row[header.columns.article]);
 
     if (!article) continue;
 
@@ -135,28 +154,70 @@ export function parseInventoryFile(buffer: Buffer): ParsedInventoryFile {
 
     if (article.includes('Итого')) continue;
 
-    const productName = cellText(row[4]);
+    const productName = cellText(row[header.columns.productName]);
     if (!productName) continue;
 
-    const salePrice = parseNullableNumber(row[9]);
-    const totalSaleValue = parseNullableNumber(row[10]);
-    const quantity = parseInteger(row[5], 0);
+    const salePrice = parseNullableNumberAt(row, header.columns.salePrice);
+    const totalSaleValue = parseNullableNumberAt(row, header.columns.totalValue);
+    const quantity = parseInteger(row[header.columns.quantity], 0);
 
     items.push({
       rowNumber: i + 1,
       snapshotDate,
       article,
-      barcode: nullableText(row[2]),
+      barcode: nullableTextAt(row, header.columns.barcode),
       productName,
       quantity,
-      purchasePrice: parseNullableNumber(row[7]),
+      purchasePrice: parseNullableNumberAt(row, header.columns.purchasePrice),
       salePrice,
       totalValue: totalSaleValue ?? (salePrice ?? 0) * quantity,
       category,
     });
   }
 
+  if (items.length === 0) {
+    throw new BeksarFileValidationError('No inventory rows found in file');
+  }
+
   return { snapshotDate, items };
+}
+
+function readInventorySheet(buffer: Buffer): SheetRow[] {
+  try {
+    return readFirstSheet(buffer);
+  } catch (error) {
+    throw new BeksarFileValidationError(error instanceof Error ? error.message : 'Invalid inventory workbook');
+  }
+}
+
+function findInventoryHeader(rows: SheetRow[]): { rowIndex: number; columns: InventoryColumns } | null {
+  for (let rowIndex = 0; rowIndex < rows.length; rowIndex += 1) {
+    const row = rows[rowIndex];
+    const columns: InventoryColumns = {
+      article: findColumn(row, ['артикул']),
+      barcode: findOptionalColumn(row, ['штрихкод', 'штрих код', 'barcode']),
+      productName: findColumn(row, ['наименование', 'товар', 'название']),
+      quantity: findColumn(row, ['количество', 'кол во', 'кол-во', 'остаток', 'остатки']),
+      purchasePrice: findOptionalColumn(row, ['закупочная цена', 'цена закупки', 'закуп']),
+      salePrice: findOptionalColumn(row, ['цена продажи', 'продажная цена', 'розничная цена', 'розница']),
+      totalValue: findOptionalColumn(row, ['сумма продажи', 'стоимость продажи', 'сумма', 'стоимость']),
+    };
+
+    if (columns.article !== -1 && columns.productName !== -1 && columns.quantity !== -1) {
+      return { rowIndex, columns };
+    }
+  }
+
+  return null;
+}
+
+function findColumn(row: SheetRow, aliases: string[]): number {
+  return row.findIndex((cell) => aliases.some((alias) => normalizeHeader(cellText(cell)).includes(normalizeHeader(alias))));
+}
+
+function findOptionalColumn(row: SheetRow, aliases: string[]): number | null {
+  const index = findColumn(row, aliases);
+  return index === -1 ? null : index;
 }
 
 function readFirstSheet(buffer: Buffer): SheetRow[] {
@@ -200,6 +261,11 @@ function findSnapshotDate(rows: SheetRow[]): Date | null {
   }
 
   return null;
+}
+
+function findSnapshotDateFromFileName(fileName?: string): Date | null {
+  if (!fileName) return null;
+  return parseDate(fileName);
 }
 
 function parseCategory(value: string): string | null {
@@ -264,12 +330,27 @@ function parseNullableNumber(value: unknown): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function parseNullableNumberAt(row: SheetRow, index: number | null): number | null {
+  return index === null ? null : parseNullableNumber(row[index]);
+}
+
 function nullableText(value: unknown): string | null {
   const text = cellText(value);
   return text || null;
 }
 
+function nullableTextAt(row: SheetRow, index: number | null): string | null {
+  return index === null ? null : nullableText(row[index]);
+}
+
 function cellText(value: unknown): string {
   if (value === null || value === undefined) return '';
   return String(value).trim();
+}
+
+function normalizeHeader(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/ё/g, 'е')
+    .replace(/[^a-zа-я0-9]+/g, '');
 }

@@ -2,7 +2,7 @@ import { Router, Response, NextFunction } from 'express';
 import multer from 'multer';
 import { authMiddleware } from '../../middleware/auth.js';
 import { AuthenticatedRequest } from '../../types/express.d.js';
-import { STATUS_STORE_ID } from './beksar.parser.js';
+import { BeksarFileValidationError, STATUS_STORE_ID } from './beksar.parser.js';
 import { beksarService, DuplicateImportError } from './beksar.service.js';
 import { beksarFtpService, FtpSyncError } from './beksar.ftp.service.js';
 import { z } from 'zod';
@@ -181,6 +181,11 @@ function parseStoreId(value: unknown) {
 function handleImportError(error: unknown, res: Response, next: NextFunction) {
   if (error instanceof DuplicateImportError) {
     res.status(409).json({ error: { code: 'DUPLICATE_IMPORT', message: error.message } });
+    return;
+  }
+
+  if (error instanceof BeksarFileValidationError) {
+    res.status(400).json({ error: { code: 'INVALID_BEKSAR_FILE', message: error.message } });
     return;
   }
 

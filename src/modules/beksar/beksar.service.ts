@@ -140,10 +140,7 @@ class BeksarService {
     const fileHash = calculateFileHash(fileBuffer);
     await this.assertNotImported(fileHash, STATUS_STORE_ID, STATUS_INVENTORY_SOURCE);
 
-    const parsed = parseInventoryFile(fileBuffer);
-    if (parsed.items.length === 0) {
-      throw new Error('No inventory rows found in file');
-    }
+    const parsed = parseInventoryFile(fileBuffer, fileName);
 
     const importLog = await prisma.importLog.create({
       data: {

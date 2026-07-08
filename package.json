@@ -6,7 +6,8 @@
     "build": "chmod +x render-build.sh && ./render-build.sh",
     "start": "npx tsx src/index.ts",
     "db:migrate": "prisma migrate deploy",
-    "db:seed": "tsx prisma/seed.ts"
+    "db:seed": "tsx prisma/seed.ts",
+    "test:beksar-inventory": "tsx tests/beksar-inventory-parser.test.ts"
   },
   "dependencies": {
     "@prisma/client": "6.16.3",
