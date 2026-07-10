@@ -27,6 +27,17 @@ class DashboardController {
     }
   }
 
+  async getDailyFinancials(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const query = req.query as unknown as DashboardQueryInput;
+      query.storeId = getEffectiveStoreId(req.user, query.storeId) || undefined;
+      const data = await dashboardService.getDailyFinancials(query);
+      res.json({ data });
+    } catch (error) {
+      next(error);
+    }
+  }
+
   async getStoresComparison(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       const query = req.query as unknown as DashboardQueryInput;

@@ -65,6 +65,10 @@ class DashboardService {
     return queries.getSalesDynamic(query);
   }
 
+  async getDailyFinancials(query: DashboardQueryInput) {
+    return queries.getDailyFinancials(query);
+  }
+
   async getStoresComparison(query: DashboardQueryInput) {
     return queries.getStoresComparison(query);
   }

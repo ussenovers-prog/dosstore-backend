@@ -171,6 +171,127 @@ export async function getDRR(filter: DateFilter): Promise<number> {
   return (adSpend / revenue) * 100;
 }
 
+export async function getDailyFinancials(filter: DateFilter) {
+  const dateFilter = buildDateFilter(filter.dateFrom, filter.dateTo);
+  const saleWhere: Prisma.SaleWhereInput = {};
+  const expenseWhere: Prisma.ExpenseWhereInput = {};
+  const advertisingWhere: Prisma.AdvertisingExpenseWhereInput = {};
+
+  if (filter.storeId) {
+    saleWhere.storeId = filter.storeId;
+    expenseWhere.storeId = filter.storeId;
+    advertisingWhere.storeId = filter.storeId;
+  }
+  if (dateFilter) {
+    saleWhere.saleDate = dateFilter;
+    expenseWhere.expenseDate = dateFilter;
+    advertisingWhere.date = dateFilter;
+  }
+
+  const [sales, expenses, importedAds] = await Promise.all([
+    prisma.sale.findMany({
+      where: saleWhere,
+      select: {
+        saleDate: true,
+        quantity: true,
+        totalAmount: true,
+        beksarDocId: true,
+        product: { select: { purchasePrice: true } },
+      },
+    }),
+    prisma.expense.findMany({
+      where: expenseWhere,
+      select: {
+        expenseDate: true,
+        category: true,
+        amount: true,
+      },
+    }),
+    prisma.advertisingExpense.findMany({
+      where: advertisingWhere,
+      select: {
+        date: true,
+        amount: true,
+      },
+    }),
+  ]);
+
+  const daily = new Map<string, DailyFinancialBucket>();
+
+  for (const sale of sales) {
+    const bucket = getDailyBucket(daily, sale.saleDate);
+    bucket.revenue += toNumber(sale.totalAmount);
+    bucket.costOfGoods += sale.quantity * toNumber(sale.product.purchasePrice);
+    bucket.orders.add(sale.beksarDocId);
+  }
+
+  for (const expense of expenses) {
+    const bucket = getDailyBucket(daily, expense.expenseDate);
+    const amount = toNumber(expense.amount);
+    bucket.expenses += amount;
+    if (expense.category === 'target_ads') {
+      bucket.adSpend += amount;
+    }
+  }
+
+  for (const ad of importedAds) {
+    const bucket = getDailyBucket(daily, ad.date);
+    const amount = toNumber(ad.amount);
+    bucket.adSpend += amount;
+    bucket.importedAdSpend += amount;
+  }
+
+  return Array.from(daily.values())
+    .map((bucket) => {
+      const grossProfit = bucket.revenue - bucket.costOfGoods;
+      const netProfit = grossProfit - bucket.expenses - bucket.importedAdSpend;
+      const ordersCount = bucket.orders.size;
+
+      return {
+        date: bucket.date,
+        revenue: bucket.revenue,
+        costOfGoods: bucket.costOfGoods,
+        grossProfit,
+        adSpend: bucket.adSpend,
+        netProfit,
+        drr: bucket.revenue === 0 ? 0 : (bucket.adSpend / bucket.revenue) * 100,
+        adROI: bucket.adSpend === 0 ? 0 : (bucket.revenue - bucket.adSpend) / bucket.adSpend,
+        ordersCount,
+        averageCheck: ordersCount === 0 ? 0 : bucket.revenue / ordersCount,
+      };
+    })
+    .sort((a, b) => a.date.localeCompare(b.date));
+}
+
+interface DailyFinancialBucket {
+  date: string;
+  revenue: number;
+  costOfGoods: number;
+  expenses: number;
+  adSpend: number;
+  importedAdSpend: number;
+  orders: Set<string>;
+}
+
+function getDailyBucket(daily: Map<string, DailyFinancialBucket>, date: Date): DailyFinancialBucket {
+  const dateKey = date.toISOString().slice(0, 10);
+  let bucket = daily.get(dateKey);
+  if (!bucket) {
+    bucket = {
+      date: dateKey,
+      revenue: 0,
+      costOfGoods: 0,
+      expenses: 0,
+      adSpend: 0,
+      importedAdSpend: 0,
+      orders: new Set<string>(),
+    };
+    daily.set(dateKey, bucket);
+  }
+
+  return bucket;
+}
+
 // ============================================================
 // OPERATIONAL KPIs
 // ============================================================

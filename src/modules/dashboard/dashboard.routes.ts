@@ -12,6 +12,7 @@ router.use(storeAccessMiddleware);
 
 router.get('/kpi', validate(dashboardQuerySchema, 'query'), dashboardController.getKPIs);
 router.get('/sales-dynamic', validate(dashboardQuerySchema, 'query'), dashboardController.getSalesDynamic);
+router.get('/daily-financials', validate(dashboardQuerySchema, 'query'), dashboardController.getDailyFinancials);
 router.get('/stores-comparison', validate(dashboardQuerySchema, 'query'), dashboardController.getStoresComparison);
 router.get('/top-products', validate(topProductsQuerySchema, 'query'), dashboardController.getTopProducts);
 router.get('/abc-analysis', validate(abcAnalysisQuerySchema, 'query'), dashboardController.getAbcAnalysis);

@@ -262,6 +262,15 @@ const api = {
 // ============================================================
 function getDemoData(method, path) {
   if (path.includes('/dashboard/kpi')) return { data: { revenue: 2450000, grossProfit: 980000, netProfit: 520000, avgCheck: 8750, margin: 40, adSpend: 185000, cac: 3200, adROI: 4.35, drr: 7.55, visitors: 5800, buyers: 280, conversion: 4.83, inventoryValue: 8500000, inventoryItems: 1240 } };
+  if (path.includes('/dashboard/daily-financials')) return { data: Array.from({length:14}, (_,i) => {
+    const revenue = 70000 + i * 3500;
+    const costOfGoods = Math.round(revenue * 0.42);
+    const grossProfit = revenue - costOfGoods;
+    const adSpend = 4500 + (i % 4) * 1300;
+    const netProfit = grossProfit - adSpend;
+    const ordersCount = 6 + (i % 5);
+    return { date: new Date(Date.now()-((13-i)*86400000)).toISOString().split('T')[0], revenue, costOfGoods, grossProfit, adSpend, netProfit, drr: revenue ? adSpend / revenue * 100 : 0, adROI: adSpend ? (revenue - adSpend) / adSpend : 0, ordersCount, averageCheck: ordersCount ? revenue / ordersCount : 0 };
+  }) };
   if (path.includes('/dashboard/sales-dynamic')) return { data: Array.from({length:30}, (_,i) => ({ date: new Date(Date.now()-((29-i)*86400000)).toISOString().split('T')[0], revenue: 50000+Math.random()*80000, storeId: (i%2)+1 })) };
   if (path.includes('/dashboard/stores-comparison')) return { data: [{ storeId:1, storeName:'Dosstore', revenue:1450000, grossProfit:580000, netProfit:310000, adSpend:95000, visitors:3200, buyers:160, conversion:5, avgCheck:9062 },{ storeId:2, storeName:'Status', revenue:1000000, grossProfit:400000, netProfit:210000, adSpend:90000, visitors:2600, buyers:120, conversion:4.6, avgCheck:8333 }] };
   if (path.includes('/dashboard/top-products')) return { data: Array.from({length:10}, (_,i) => ({ productId:i+1, productName:`Товар ${i+1}`, article:`ART-${1000+i}`, brand:['Nike','Adidas','Zara','H&M','Puma'][i%5], totalAmount: 250000-i*20000, quantity: 45-i*3 })) };
@@ -398,11 +407,50 @@ function renderPage(page) {
 }
 
 async function renderDashboard(el) {
-  el.innerHTML = '<div class="fade-in"><div class="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-6" id="kpiCards"></div><div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6"><div class="bg-surface-800 rounded-xl border border-surface-700 p-4"><h3 class="text-sm font-semibold text-white mb-3">Динамика продаж</h3><canvas id="salesChart" height="200"></canvas></div><div class="bg-surface-800 rounded-xl border border-surface-700 p-4"><h3 class="text-sm font-semibold text-white mb-3">Сравнение магазинов</h3><canvas id="storesChart" height="200"></canvas></div></div><div class="grid grid-cols-1 lg:grid-cols-2 gap-4"><div class="bg-surface-800 rounded-xl border border-surface-700 p-4"><h3 class="text-sm font-semibold text-white mb-3">Структура расходов</h3><canvas id="expenseChart" height="200"></canvas></div><div class="bg-surface-800 rounded-xl border border-surface-700 p-4"><h3 class="text-sm font-semibold text-white mb-3">Топ товаров</h3><canvas id="topProductsChart" height="200"></canvas></div></div></div>';
+  el.innerHTML = `
+    <div class="fade-in">
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-6" id="kpiCards"></div>
+      <div class="bg-surface-800 rounded-xl border border-surface-700 p-4 mb-6">
+        <h3 class="text-sm font-semibold text-white mb-3">Финансы по дням</h3>
+        <canvas id="dailyFinancialChart" height="120"></canvas>
+      </div>
+      <div class="bg-surface-800 rounded-xl border border-surface-700 p-4 mb-6">
+        <h3 class="text-sm font-semibold text-white mb-3">Дневная финансовая таблица</h3>
+        <div class="overflow-x-auto">
+          <table class="table-dark w-full text-sm">
+            <thead>
+              <tr>
+                <th class="text-left px-3 py-2 text-xs text-surface-200 font-medium">Дата</th>
+                <th class="text-right px-3 py-2 text-xs text-surface-200 font-medium">Выручка</th>
+                <th class="text-right px-3 py-2 text-xs text-surface-200 font-medium">COGS</th>
+                <th class="text-right px-3 py-2 text-xs text-surface-200 font-medium">Валовая</th>
+                <th class="text-right px-3 py-2 text-xs text-surface-200 font-medium">Реклама</th>
+                <th class="text-right px-3 py-2 text-xs text-surface-200 font-medium">Чистая</th>
+                <th class="text-right px-3 py-2 text-xs text-surface-200 font-medium">ДРР</th>
+                <th class="text-right px-3 py-2 text-xs text-surface-200 font-medium">ROI</th>
+                <th class="text-right px-3 py-2 text-xs text-surface-200 font-medium">Заказы</th>
+                <th class="text-right px-3 py-2 text-xs text-surface-200 font-medium">Средний чек</th>
+              </tr>
+            </thead>
+            <tbody id="dailyFinancialTable"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+        <div class="bg-surface-800 rounded-xl border border-surface-700 p-4"><h3 class="text-sm font-semibold text-white mb-3">Динамика продаж</h3><canvas id="salesChart" height="200"></canvas></div>
+        <div class="bg-surface-800 rounded-xl border border-surface-700 p-4"><h3 class="text-sm font-semibold text-white mb-3">Сравнение магазинов</h3><canvas id="storesChart" height="200"></canvas></div>
+      </div>
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div class="bg-surface-800 rounded-xl border border-surface-700 p-4"><h3 class="text-sm font-semibold text-white mb-3">Структура расходов</h3><canvas id="expenseChart" height="200"></canvas></div>
+        <div class="bg-surface-800 rounded-xl border border-surface-700 p-4"><h3 class="text-sm font-semibold text-white mb-3">Топ товаров</h3><canvas id="topProductsChart" height="200"></canvas></div>
+      </div>
+    </div>
+  `;
 
   const f = getFilters();
-  const [kpi, salesDyn, storesComp, expBreak, topProd] = await Promise.all([
+  const [kpi, dailyFinancials, salesDyn, storesComp, expBreak, topProd] = await Promise.all([
     api.get(`/dashboard/kpi${f}`),
+    api.get(`/dashboard/daily-financials${f}`),
     api.get(`/dashboard/sales-dynamic${f}`),
     api.get(`/dashboard/stores-comparison${f}`),
     api.get(`/dashboard/expense-breakdown${f}`),
@@ -434,6 +482,36 @@ async function renderDashboard(el) {
       <p class="text-lg md:text-xl font-bold text-${k.color}">${k.value}</p>
     </div>
   `).join('');
+
+  const daily = dailyFinancials.data || [];
+  charts.dailyFinancial = new Chart(document.getElementById('dailyFinancialChart'), {
+    type: 'line',
+    data: {
+      labels: daily.map(row => row.date.slice(5)),
+      datasets: [
+        { label:'Выручка', data:daily.map(row=>row.revenue), borderColor:'#38bdf8', backgroundColor:'rgba(56,189,248,0.08)', tension:0.35, pointRadius:2 },
+        { label:'Валовая', data:daily.map(row=>row.grossProfit), borderColor:'#4ade80', backgroundColor:'rgba(74,222,128,0.08)', tension:0.35, pointRadius:2 },
+        { label:'Чистая', data:daily.map(row=>row.netProfit), borderColor:'#a78bfa', backgroundColor:'rgba(167,139,250,0.08)', tension:0.35, pointRadius:2 },
+        { label:'Реклама', data:daily.map(row=>row.adSpend), borderColor:'#fbbf24', backgroundColor:'rgba(251,191,36,0.08)', tension:0.35, pointRadius:2 },
+      ]
+    },
+    options: { responsive:true, plugins:{legend:{labels:{color:'#94a3b8'}}}, scales:{ x:{ticks:{color:'#64748b',maxTicksLimit:10}}, y:{ticks:{color:'#64748b',callback:v=>fmt(v)}} } }
+  });
+
+  document.getElementById('dailyFinancialTable').innerHTML = daily.length ? daily.map(row => `
+    <tr>
+      <td class="px-3 py-2 text-white whitespace-nowrap">${fmtDate(row.date)}</td>
+      <td class="px-3 py-2 text-right text-brand-400 font-medium">${fmtMoney(row.revenue)}</td>
+      <td class="px-3 py-2 text-right text-surface-200">${fmtMoney(row.costOfGoods)}</td>
+      <td class="px-3 py-2 text-right text-success-400">${fmtMoney(row.grossProfit)}</td>
+      <td class="px-3 py-2 text-right text-warn-400">${fmtMoney(row.adSpend)}</td>
+      <td class="px-3 py-2 text-right text-accent-400">${fmtMoney(row.netProfit)}</td>
+      <td class="px-3 py-2 text-right text-danger-400">${fmtPct(row.drr)}</td>
+      <td class="px-3 py-2 text-right text-success-400">${row.adROI.toFixed(2)}</td>
+      <td class="px-3 py-2 text-right text-white">${fmt(row.ordersCount)}</td>
+      <td class="px-3 py-2 text-right text-brand-400">${fmtMoney(row.averageCheck)}</td>
+    </tr>
+  `).join('') : '<tr><td colspan="10" class="px-3 py-6 text-center text-surface-200">Нет данных за период</td></tr>';
 
   // Sales dynamic chart
   const salesData = salesDyn.data || [];
