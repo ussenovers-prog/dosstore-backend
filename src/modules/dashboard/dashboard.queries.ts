@@ -339,29 +339,72 @@ export async function getInventorySummary(filter: DateFilter) {
   const where: Prisma.InventoryWhereInput = {};
   if (filter.storeId) where.storeId = filter.storeId;
 
-  // Get latest snapshot
-  const latestSnapshot = await prisma.inventory.findFirst({
+  const latestSnapshots = await prisma.inventory.groupBy({
+    by: ['storeId'],
     where,
-    orderBy: { snapshotDate: 'desc' },
-    select: { snapshotDate: true },
+    _max: { snapshotDate: true },
   });
 
-  if (!latestSnapshot) {
-    return { totalValue: 0, totalItems: 0, snapshotDate: null };
+  const currentSnapshots = latestSnapshots
+    .filter((snapshot) => snapshot._max.snapshotDate)
+    .map((snapshot) => ({
+      storeId: snapshot.storeId,
+      snapshotDate: snapshot._max.snapshotDate as Date,
+    }));
+
+  if (currentSnapshots.length === 0) {
+    return {
+      totalValue: 0,
+      totalItems: 0,
+      inventoryCost: 0,
+      totalUnits: 0,
+      retailValue: 0,
+      potentialGrossMargin: 0,
+      snapshotDate: null,
+    };
   }
 
-  const result = await prisma.inventory.aggregate({
+  const items = await prisma.inventory.findMany({
     where: {
-      ...where,
-      snapshotDate: latestSnapshot.snapshotDate,
+      OR: currentSnapshots.map((snapshot) => ({
+        storeId: snapshot.storeId,
+        snapshotDate: snapshot.snapshotDate,
+      })),
     },
-    _sum: { totalValue: true, quantity: true },
+    select: {
+      quantity: true,
+      product: {
+        select: {
+          purchasePrice: true,
+          retailPrice: true,
+        },
+      },
+    },
   });
 
+  const totals = items.reduce(
+    (acc, item) => {
+      const purchasePrice = toNumber(item.product.purchasePrice);
+      const retailPrice = toNumber(item.product.retailPrice);
+      acc.inventoryCost += item.quantity * purchasePrice;
+      acc.retailValue += item.quantity * retailPrice;
+      acc.totalUnits += item.quantity;
+      return acc;
+    },
+    { inventoryCost: 0, retailValue: 0, totalUnits: 0 }
+  );
+  const latestSnapshotDate = currentSnapshots
+    .map((snapshot) => snapshot.snapshotDate)
+    .sort((a, b) => b.getTime() - a.getTime())[0];
+
   return {
-    totalValue: toNumber(result._sum.totalValue),
-    totalItems: result._sum.quantity || 0,
-    snapshotDate: latestSnapshot.snapshotDate,
+    totalValue: totals.retailValue,
+    totalItems: totals.totalUnits,
+    inventoryCost: totals.inventoryCost,
+    totalUnits: totals.totalUnits,
+    retailValue: totals.retailValue,
+    potentialGrossMargin: totals.retailValue - totals.inventoryCost,
+    snapshotDate: latestSnapshotDate,
   };
 }
 

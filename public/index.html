@@ -276,7 +276,7 @@ function getDemoData(method, path) {
   if (path.includes('/dashboard/top-products')) return { data: Array.from({length:10}, (_,i) => ({ productId:i+1, productName:`Товар ${i+1}`, article:`ART-${1000+i}`, brand:['Nike','Adidas','Zara','H&M','Puma'][i%5], totalAmount: 250000-i*20000, quantity: 45-i*3 })) };
   if (path.includes('/dashboard/abc-analysis')) { const tp = getDemoData('GET','/dashboard/top-products').data; return { data: { a:{items:tp.slice(0,3),revenueShare:72}, b:{items:tp.slice(3,6),revenueShare:19}, c:{items:tp.slice(6),revenueShare:9} } }; }
   if (path.includes('/dashboard/expense-breakdown')) return { data: [{category:'salary',total:320000},{category:'rent',total:180000},{category:'utilities',total:45000},{category:'target_ads',total:185000},{category:'other',total:65000}] };
-  if (path.includes('/dashboard/inventory-summary')) return { data: { totalValue:8500000, totalItems:1240, snapshotDate: new Date().toISOString().split('T')[0] } };
+  if (path.includes('/dashboard/inventory-summary')) return { data: { totalValue:12400000, totalItems:1240, inventoryCost:8500000, totalUnits:1240, retailValue:12400000, potentialGrossMargin:3900000, snapshotDate: new Date().toISOString().split('T')[0] } };
   if (path.includes('/dashboard/no-movement')) return { data: Array.from({length:5}, (_,i) => ({ id:i+1, name:`Товар без движения ${i+1}`, article:`NM-${i+1}`, brand:'Brand' })) };
   if (path.includes('/dashboard/low-stock')) return { data: Array.from({length:5}, (_,i) => ({ productId:i+1, productName:`Маломерный ${i+1}`, article:`LS-${i+1}`, brand:'Brand', quantity:i+1, totalValue:(i+1)*5000 })) };
   if (path.includes('/expenses')) return { data: Array.from({length:15}, (_,i) => ({ id:i+1, storeId:(i%2)+1, category:['salary','rent','utilities','target_ads','other'][i%5], expenseDate: new Date(Date.now()-i*86400000*3).toISOString().split('T')[0], amount:15000+Math.random()*100000, description:'Описание расхода', isRecurring:i%3===0, store:{id:(i%2)+1,name:['Dosstore','Status'][i%2]} })), meta:{page:1,limit:50,total:15,totalPages:1} };
@@ -631,13 +631,23 @@ async function renderInventory(el) {
   el.innerHTML = `<div class="fade-in">
     <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
       <div class="kpi-card bg-surface-800 rounded-xl border border-surface-700 p-4">
-        <p class="text-xs text-surface-200 mb-1">Общая стоимость</p>
-        <p class="text-xl font-bold text-brand-400" id="invValue">—</p>
+        <p class="text-xs text-surface-200 mb-1">Себестоимость остатков</p>
+        <p class="text-xl font-bold text-warn-400" id="invCost">—</p>
       </div>
       <div class="kpi-card bg-surface-800 rounded-xl border border-surface-700 p-4">
-        <p class="text-xs text-surface-200 mb-1">Всего товаров</p>
-        <p class="text-xl font-bold text-white" id="invItems">—</p>
+        <p class="text-xs text-surface-200 mb-1">Остаток, шт</p>
+        <p class="text-xl font-bold text-white" id="invUnits">—</p>
       </div>
+      <div class="kpi-card bg-surface-800 rounded-xl border border-surface-700 p-4">
+        <p class="text-xs text-surface-200 mb-1">Розничная стоимость</p>
+        <p class="text-xl font-bold text-brand-400" id="invRetailValue">—</p>
+      </div>
+      <div class="kpi-card bg-surface-800 rounded-xl border border-surface-700 p-4">
+        <p class="text-xs text-surface-200 mb-1">Потенц. валовая маржа</p>
+        <p class="text-xl font-bold text-success-400" id="invPotentialMargin">—</p>
+      </div>
+    </div>
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
       <div class="kpi-card bg-surface-800 rounded-xl border border-surface-700 p-4">
         <p class="text-xs text-surface-200 mb-1">Дата снапшота</p>
         <p class="text-xl font-bold text-surface-200" id="invDate">—</p>
@@ -678,8 +688,10 @@ async function renderInventory(el) {
   ]);
 
   const s = summary.data;
-  document.getElementById('invValue').textContent = fmtMoney(s.totalValue);
-  document.getElementById('invItems').textContent = fmt(s.totalItems);
+  document.getElementById('invCost').textContent = fmtMoney(s.inventoryCost);
+  document.getElementById('invUnits').textContent = fmt(s.totalUnits);
+  document.getElementById('invRetailValue').textContent = fmtMoney(s.retailValue);
+  document.getElementById('invPotentialMargin').textContent = fmtMoney(s.potentialGrossMargin);
   document.getElementById('invDate').textContent = s.snapshotDate ? new Date(s.snapshotDate).toLocaleDateString('ru-RU') : '—';
   document.getElementById('invTurnover').textContent = turnover.data.toFixed(2);
 
