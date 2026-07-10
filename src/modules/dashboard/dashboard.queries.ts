@@ -46,17 +46,34 @@ export async function getRevenue(filter: DateFilter): Promise<number> {
 }
 
 export async function getGrossProfit(filter: DateFilter): Promise<number> {
-  const dateFilter = buildDateFilter(filter.dateFrom, filter.dateTo);
-  const where: Prisma.GrossProfitWhereInput = {};
-  if (filter.storeId) where.storeId = filter.storeId;
-  if (dateFilter) where.periodDate = dateFilter;
+  const revenue = await getRevenue(filter);
+  const cogs = await getCostOfGoods(filter);
 
-  const result = await prisma.grossProfit.aggregate({
+  return revenue - cogs;
+}
+
+export async function getCostOfGoods(filter: DateFilter): Promise<number> {
+  const dateFilter = buildDateFilter(filter.dateFrom, filter.dateTo);
+  const where: Prisma.SaleWhereInput = {};
+  if (filter.storeId) where.storeId = filter.storeId;
+  if (dateFilter) where.saleDate = dateFilter;
+
+  const sales = await prisma.sale.findMany({
     where,
-    _sum: { grossProfit: true },
+    select: {
+      quantity: true,
+      product: {
+        select: {
+          purchasePrice: true,
+        },
+      },
+    },
   });
 
-  return toNumber(result._sum.grossProfit);
+  return sales.reduce((total, sale) => {
+    const purchasePrice = toNumber(sale.product.purchasePrice);
+    return total + sale.quantity * purchasePrice;
+  }, 0);
 }
 
 export async function getNetProfit(filter: DateFilter): Promise<number> {
@@ -298,18 +315,7 @@ export async function getLowStockProducts(filter: DateFilter, threshold: number 
 }
 
 export async function getInventoryTurnover(filter: DateFilter): Promise<number> {
-  const dateFilter = buildDateFilter(filter.dateFrom, filter.dateTo);
-  const cogsWhere: Prisma.GrossProfitWhereInput = {};
-  if (filter.storeId) cogsWhere.storeId = filter.storeId;
-  if (dateFilter) cogsWhere.periodDate = dateFilter;
-
-  const cogsResult = await prisma.grossProfit.aggregate({
-    where: cogsWhere,
-    _sum: { costOfGoods: true },
-  });
-
-  const cogs = toNumber(cogsResult._sum.costOfGoods);
-
+  const cogs = await getCostOfGoods(filter);
   const invSummary = await getInventorySummary(filter);
   if (invSummary.totalValue === 0) return 0;
 

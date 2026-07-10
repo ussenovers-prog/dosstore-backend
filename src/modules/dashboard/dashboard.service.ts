@@ -13,6 +13,7 @@ class DashboardService {
     const [
       revenue,
       grossProfit,
+      costOfGoods,
       netProfit,
       avgCheck,
       margin,
@@ -27,6 +28,7 @@ class DashboardService {
     ] = await Promise.all([
       queries.getRevenue(filter),
       queries.getGrossProfit(filter),
+      queries.getCostOfGoods(filter),
       queries.getNetProfit(filter),
       queries.getAvgCheck(filter),
       queries.getMargin(filter),
@@ -43,6 +45,7 @@ class DashboardService {
     return {
       revenue,
       grossProfit,
+      costOfGoods,
       netProfit,
       avgCheck,
       margin,
