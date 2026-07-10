@@ -56,16 +56,7 @@ class ExpensesController {
       const id = parseInt(req.params.id, 10);
       const input = req.body as UpdateExpenseInput;
 
-      // Check ownership for employees
-      if (req.user.role === 'employee') {
-        const expense = await expensesService.getById(id);
-        if (expense.storeId !== req.user.storeId) {
-          res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Access denied' } });
-          return;
-        }
-      }
-
-      const expense = await expensesService.update(id, input);
+      const expense = await expensesService.update(id, input, req.user.userId);
       res.json({ data: expense });
     } catch (error) {
       next(error);
@@ -75,15 +66,6 @@ class ExpensesController {
   async delete(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       const id = parseInt(req.params.id, 10);
-
-      // Check ownership for employees
-      if (req.user.role === 'employee') {
-        const expense = await expensesService.getById(id);
-        if (expense.storeId !== req.user.storeId) {
-          res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Access denied' } });
-          return;
-        }
-      }
 
       const result = await expensesService.delete(id);
       res.json({ data: result });

@@ -3,10 +3,11 @@ import { authController } from './auth.controller.js';
 import { validate } from '../../middleware/validate.js';
 import { registerSchema, loginSchema, refreshTokenSchema } from './auth.schema.js';
 import { authMiddleware } from '../../middleware/auth.js';
+import { requireOwner } from '../../middleware/roles.js';
 
 const router = Router();
 
-router.post('/register', validate(registerSchema), authController.register);
+router.post('/register', authMiddleware, requireOwner, validate(registerSchema), authController.register);
 router.post('/login', validate(loginSchema), authController.login);
 router.post('/refresh', validate(refreshTokenSchema), authController.refresh);
 router.post('/logout', authMiddleware, authController.logout);

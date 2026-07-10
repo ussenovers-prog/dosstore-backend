@@ -1,12 +1,13 @@
 import { Response, NextFunction } from 'express';
 import { verifyToken } from '../utils/jwt.js';
 import { AuthenticatedRequest, AuthUser } from '../types/express.d.js';
+import prisma from '../utils/prisma.js';
 
-export function authMiddleware(
+export async function authMiddleware(
   req: AuthenticatedRequest,
   res: Response,
   next: NextFunction
-): void {
+): Promise<void> {
   const authHeader = req.headers.authorization;
 
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -23,7 +24,27 @@ export function authMiddleware(
 
   try {
     const payload = verifyToken(token);
-    req.user = payload as AuthUser;
+    const user = await prisma.user.findUnique({
+      where: { id: payload.userId },
+      select: { id: true, email: true, role: true, storeId: true, isActive: true },
+    });
+
+    if (!user || !user.isActive) {
+      res.status(401).json({
+        error: {
+          code: 'ACCOUNT_INACTIVE',
+          message: 'Account is inactive or no longer exists',
+        },
+      });
+      return;
+    }
+
+    req.user = {
+      userId: user.id,
+      email: user.email,
+      role: user.role,
+      storeId: user.storeId,
+    } as AuthUser;
     next();
   } catch (error) {
     res.status(401).json({

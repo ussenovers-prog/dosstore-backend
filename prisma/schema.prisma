@@ -1,5 +1,5 @@
 // ============================================================
-// Clothing Store Analytics — MVP
+// Dosstore Analytics — MVP
 // Prisma Schema (PostgreSQL for production)
 // ============================================================
 
@@ -55,7 +55,8 @@ model User {
   updatedAt    DateTime @updatedAt
 
   store    Store?    @relation(fields: [storeId], references: [id], onDelete: SetNull)
-  expenses Expense[]
+  expenses Expense[] @relation("ExpenseCreator")
+  editedExpenses Expense[] @relation("ExpenseEditor")
   visitors Visitor[]
 
   @@index([role])
@@ -223,11 +224,13 @@ model Expense {
   campaignName String?
   channel      String?
   createdBy    Int?
+  updatedBy    Int?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
   store   Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  creator User? @relation(fields: [createdBy], references: [id], onDelete: SetNull)
+  creator User? @relation("ExpenseCreator", fields: [createdBy], references: [id], onDelete: SetNull)
+  editor  User? @relation("ExpenseEditor", fields: [updatedBy], references: [id], onDelete: SetNull)
 
   @@index([storeId, expenseDate])
   @@index([category])

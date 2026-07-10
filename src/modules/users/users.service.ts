@@ -1,6 +1,6 @@
 import prisma from '../../utils/prisma.js';
 import { hashPassword } from '../../utils/password.js';
-import { CreateUserInput, UpdateUserInput, UserQueryInput } from './users.schema.js';
+import { CreateUserInput, ResetPasswordInput, UpdateUserInput, UserQueryInput } from './users.schema.js';
 import { AppError, NotFoundError } from '../../middleware/errorHandler.js';
 
 class UsersService {
@@ -66,6 +66,9 @@ class UsersService {
       const store = await prisma.store.findUnique({ where: { id: input.storeId } });
       if (!store) throw new NotFoundError('Store');
     }
+    if (input.role === 'employee' && !input.storeId) {
+      throw new AppError('Employee must be assigned to a store', 400, 'STORE_REQUIRED');
+    }
 
     const passwordHash = await hashPassword(input.password);
 
@@ -94,10 +97,21 @@ class UsersService {
   async update(id: number, input: UpdateUserInput) {
     const user = await prisma.user.findUnique({ where: { id } });
     if (!user) throw new NotFoundError('User');
+    const nextRole = input.role ?? user.role;
+    const nextStoreId = input.storeId === undefined ? user.storeId : input.storeId;
 
     if (input.storeId) {
       const store = await prisma.store.findUnique({ where: { id: input.storeId } });
       if (!store) throw new NotFoundError('Store');
+    }
+    if (nextRole === 'employee' && !nextStoreId) {
+      throw new AppError('Employee must be assigned to a store', 400, 'STORE_REQUIRED');
+    }
+    if (user.role === 'owner' && input.role === 'employee') {
+      await this.assertAnotherActiveOwner(id);
+    }
+    if (user.role === 'owner' && input.isActive === false) {
+      await this.assertAnotherActiveOwner(id);
     }
 
     const updated = await prisma.user.update({
@@ -120,6 +134,9 @@ class UsersService {
   async deactivate(id: number) {
     const user = await prisma.user.findUnique({ where: { id } });
     if (!user) throw new NotFoundError('User');
+    if (user.role === 'owner') {
+      await this.assertAnotherActiveOwner(id);
+    }
 
     await prisma.user.update({
       where: { id },
@@ -127,6 +144,41 @@ class UsersService {
     });
 
     return { message: 'User deactivated' };
+  }
+
+  async resetPassword(id: number, input: ResetPasswordInput) {
+    const user = await prisma.user.findUnique({ where: { id } });
+    if (!user) throw new NotFoundError('User');
+
+    const passwordHash = await hashPassword(input.password);
+    const updated = await prisma.user.update({
+      where: { id },
+      data: { passwordHash },
+      select: {
+        id: true,
+        email: true,
+        fullName: true,
+        role: true,
+        storeId: true,
+        isActive: true,
+        updatedAt: true,
+      },
+    });
+
+    return updated;
+  }
+
+  private async assertAnotherActiveOwner(userId: number) {
+    const ownerCount = await prisma.user.count({
+      where: {
+        id: { not: userId },
+        role: 'owner',
+        isActive: true,
+      },
+    });
+    if (ownerCount === 0) {
+      throw new AppError('At least one active owner is required', 400, 'LAST_OWNER');
+    }
   }
 }
 

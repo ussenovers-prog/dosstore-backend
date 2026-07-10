@@ -2,8 +2,16 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Clothing Analytics</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Dosstore Analytics</title>
+<meta name="theme-color" content="#020617">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Dosstore">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" type="image/svg+xml" href="/icons/dosstore-analytics.svg">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -28,6 +36,7 @@ tailwind.config = {
 </script>
 <style>
 * { scrollbar-width: thin; scrollbar-color: #334155 transparent; }
+body { padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); }
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
@@ -49,6 +58,9 @@ tailwind.config = {
 @media (max-width: 768px) {
   .sidebar-desktop { transform: translateX(-100%); transition: transform 0.3s ease; }
   .sidebar-desktop.open { transform: translateX(0); }
+  header { min-height: 4rem; height: auto; padding-top: 0.5rem; padding-bottom: 0.5rem; align-items: flex-start; }
+  header > div:last-child { flex-wrap: wrap; justify-content: flex-end; }
+  #storeFilter { max-width: 10rem; }
 }
 </style>
 </head>
@@ -61,7 +73,7 @@ tailwind.config = {
       <div class="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-brand-500 to-accent-500 mb-4">
         <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
       </div>
-      <h1 class="text-2xl font-bold text-white">Clothing Analytics</h1>
+      <h1 class="text-2xl font-bold text-white">Dosstore Analytics</h1>
       <p class="text-surface-200 mt-1 text-sm">Система аналитики сети магазинов</p>
     </div>
     <form id="loginForm" class="space-y-4">
@@ -92,7 +104,7 @@ tailwind.config = {
           <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
         </div>
         <div>
-          <h2 class="text-sm font-bold text-white">Analytics</h2>
+          <h2 class="text-sm font-bold text-white">Dosstore</h2>
           <p class="text-xs text-surface-200" id="currentUserRole">Owner</p>
         </div>
       </div>
@@ -123,11 +135,15 @@ tailwind.config = {
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
           ABC-анализ
         </a>
-        <a href="#/imports" class="sidebar-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm" data-page="imports">
+        <a href="#/imports" class="sidebar-link owner-only-nav flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm" data-page="imports">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
           Импорты
         </a>
-        <a href="#/settings" class="sidebar-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm" data-page="settings">
+        <a href="#/users" class="sidebar-link owner-only-nav flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm" data-page="users">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M17 20h5v-2a4 4 0 00-4-4h-1M9 20H4v-2a4 4 0 014-4h1m0-4a4 4 0 100-8 4 4 0 000 8zm8 0a4 4 0 100-8 4 4 0 000 8z"/></svg>
+          Пользователи
+        </a>
+        <a href="#/settings" class="sidebar-link owner-only-nav flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm" data-page="settings">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
           Настройки
         </a>
@@ -257,6 +273,12 @@ const api = {
   delete(path) { return this.request('DELETE', path); },
 };
 
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/service-worker.js').catch(() => {});
+  });
+}
+
 // ============================================================
 // DEMO DATA (when API is not available)
 // ============================================================
@@ -362,22 +384,41 @@ function showApp() {
     if (u.role === 'employee' && u.storeId) {
       document.getElementById('storeFilter').value = u.storeId;
     }
+    applyRoleUi();
   }
   navigate();
 }
 
 function navigate() {
-  const hash = window.location.hash.replace('#/', '') || 'dashboard';
+  let hash = window.location.hash.replace('#/', '') || 'dashboard';
+  if (!canAccessPage(hash)) {
+    hash = 'dashboard';
+    window.location.hash = '#/dashboard';
+  }
   currentPage = hash;
   document.querySelectorAll('.sidebar-link').forEach(l => {
     l.classList.toggle('active', l.dataset.page === hash);
   });
-  const titles = { dashboard:'Dashboard', sales:'Продажи', inventory:'Остатки', expenses:'Расходы', visitors:'Посетители', abc:'ABC-анализ', imports:'Импорты', settings:'Настройки' };
+  const titles = { dashboard:'Dashboard', sales:'Продажи', inventory:'Остатки', expenses:'Расходы', visitors:'Посетители', abc:'ABC-анализ', imports:'Импорты', users:'Пользователи', settings:'Настройки' };
   document.getElementById('pageTitle').textContent = titles[hash] || 'Dashboard';
   renderPage(hash);
   // Close mobile sidebar
   document.getElementById('sidebar').classList.remove('open');
   document.getElementById('sidebarOverlay').classList.add('hidden');
+}
+
+function isOwner() { return api.user?.role === 'owner'; }
+function canAccessPage(page) {
+  return isOwner() || !['imports', 'users', 'settings'].includes(page);
+}
+function applyRoleUi() {
+  const owner = isOwner();
+  document.querySelectorAll('.owner-only-nav').forEach(el => el.classList.toggle('hidden', !owner));
+  const storeFilter = document.getElementById('storeFilter');
+  if (storeFilter) {
+    storeFilter.disabled = !owner;
+    storeFilter.classList.toggle('opacity-60', !owner);
+  }
 }
 
 function toggleSidebar() {
@@ -402,7 +443,7 @@ function renderPage(page) {
   const el = document.getElementById('pageContent');
   Object.values(charts).forEach(c => c.destroy());
   charts = {};
-  const renderers = { dashboard: renderDashboard, sales: renderSales, inventory: renderInventory, expenses: renderExpenses, visitors: renderVisitors, abc: renderAbc, imports: renderImports, settings: renderSettings };
+  const renderers = { dashboard: renderDashboard, sales: renderSales, inventory: renderInventory, expenses: renderExpenses, visitors: renderVisitors, abc: renderAbc, imports: renderImports, users: renderUsers, settings: renderSettings };
   (renderers[page] || renderDashboard)(el);
 }
 
@@ -579,10 +620,10 @@ async function renderSales(el) {
         </div>
       </div>
     </div>
-    <div class="flex gap-3 mb-4">
+    ${isOwner() ? `<div class="flex gap-3 mb-4">
       <button data-beksar-import="sales" class="btn-primary px-4 py-2 rounded-lg text-white text-xs font-medium">+ Импорт продаж Status</button>
       <button data-beksar-import="inventory" class="btn-primary px-4 py-2 rounded-lg text-white text-xs font-medium">+ Импорт остатков Status</button>
-    </div>
+    </div>` : ''}
     <div class="bg-surface-800 rounded-xl border border-surface-700 p-4">
       <h3 class="text-sm font-semibold text-white mb-3">Сравнение магазинов</h3>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4" id="storesCompareCards"></div>
@@ -709,7 +750,7 @@ async function renderExpenses(el) {
   el.innerHTML = `<div class="fade-in">
     <div class="flex items-center justify-between gap-3 mb-4">
       <h2 class="text-base font-semibold text-white">Рекламные расходы</h2>
-      <button onclick="openAdsImportModal()" class="btn-primary px-4 py-2 rounded-lg text-white text-xs font-medium">+ Импорт рекламы Excel</button>
+      ${isOwner() ? '<button onclick="openAdsImportModal()" class="btn-primary px-4 py-2 rounded-lg text-white text-xs font-medium">+ Импорт рекламы Excel</button>' : ''}
     </div>
     <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
       <div class="bg-surface-800 rounded-xl border border-surface-700 p-4">
@@ -806,9 +847,7 @@ async function renderExpenses(el) {
       <td class="px-3 py-2 text-surface-200">${e.store?.name||'-'}</td>
       <td class="px-3 py-2"><span class="px-2 py-0.5 rounded-full text-xs" style="background:${catColors[e.category]}20;color:${catColors[e.category]}">${catNames[e.category]||e.category}</span></td>
       <td class="px-3 py-2 text-right text-white font-medium">${fmtMoney(e.amount)}</td>
-      <td class="px-3 py-2 text-center">
-        <button onclick="deleteExpense(${e.id})" class="text-danger-400 hover:text-danger-500 text-xs">Удалить</button>
-      </td>
+      <td class="px-3 py-2 text-center">${isOwner() ? `<button onclick="deleteExpense(${e.id})" class="text-danger-400 hover:text-danger-500 text-xs">Удалить</button>` : '—'}</td>
     </tr>
   `).join('') : '<tr><td colspan="5" class="px-3 py-6 text-center text-surface-200">Нет расходов</td></tr>';
 }
@@ -1533,6 +1572,52 @@ async function loadSystemHealth() {
     `;
   }
 }
+
+async function renderUsers(el) {
+  if (!isOwner()) {
+    el.innerHTML = '<div class="fade-in bg-surface-800 rounded-xl border border-surface-700 p-6 text-sm text-surface-200">Доступно только владельцу.</div>';
+    return;
+  }
+
+  el.innerHTML = `<div class="fade-in">
+    <div class="flex items-center justify-between gap-3 mb-4">
+      <h3 class="text-sm font-semibold text-white">Управление пользователями</h3>
+      <button onclick="openUserModal()" class="btn-primary px-4 py-2 rounded-lg text-white text-xs font-medium">+ Добавить</button>
+    </div>
+    <div class="bg-surface-800 rounded-xl border border-surface-700 p-4">
+      <div class="overflow-x-auto">
+        <table class="table-dark w-full text-sm">
+          <thead><tr><th class="text-left px-3 py-2 text-xs text-surface-200 font-medium">Имя</th><th class="text-left px-3 py-2 text-xs text-surface-200 font-medium">Email</th><th class="text-left px-3 py-2 text-xs text-surface-200 font-medium">Роль</th><th class="text-left px-3 py-2 text-xs text-surface-200 font-medium">Магазин</th><th class="text-center px-3 py-2 text-xs text-surface-200 font-medium">Статус</th><th class="text-right px-3 py-2 text-xs text-surface-200 font-medium">Действия</th></tr></thead>
+          <tbody id="usersTable"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>`;
+
+  await loadUsersTable();
+}
+
+async function loadUsersTable() {
+  const usersTable = document.getElementById('usersTable');
+  if (!usersTable) return;
+
+  const usersData = await api.get('/users');
+  const users = usersData.data || [];
+  usersTable.innerHTML = users.map(u => `
+    <tr>
+      <td class="px-3 py-2 text-white">${escapeHtml(u.fullName)}</td>
+      <td class="px-3 py-2 text-surface-200">${escapeHtml(u.email)}</td>
+      <td class="px-3 py-2"><span class="px-2 py-0.5 rounded-full text-xs ${u.role==='owner'?'bg-brand-500/10 text-brand-400':'bg-surface-700 text-surface-200'}">${u.role==='owner'?'Владелец':'Сотрудник'}</span></td>
+      <td class="px-3 py-2 text-surface-200">${escapeHtml(u.store?.name || '—')}</td>
+      <td class="px-3 py-2 text-center"><span class="px-2 py-0.5 rounded-full text-xs ${u.isActive?'bg-success-500/10 text-success-400':'bg-danger-500/10 text-danger-400'}">${u.isActive?'Активен':'Отключен'}</span></td>
+      <td class="px-3 py-2 text-right whitespace-nowrap">
+        <button onclick='openResetPasswordModal(${u.id}, ${JSON.stringify(u.email)})' class="text-brand-400 hover:text-brand-500 text-xs mr-3">Пароль</button>
+        ${u.id === api.user?.id ? '<span class="text-xs text-surface-200">Текущий</span>' : `<button onclick="toggleUserActive(${u.id}, ${!u.isActive})" class="${u.isActive ? 'text-danger-400 hover:text-danger-500' : 'text-success-400 hover:text-success-500'} text-xs">${u.isActive ? 'Отключить' : 'Включить'}</button>`}
+      </td>
+    </tr>
+  `).join('');
+}
+
 async function renderSettings(el) {
   const isOwner = api.user?.role === 'owner';
   el.innerHTML = `<div class="fade-in max-w-3xl">
@@ -1679,8 +1764,42 @@ function openUserModal() {
       storeId: document.getElementById('newUserStore').value ? parseInt(document.getElementById('newUserStore').value) : null,
     });
     closeModal();
-    renderSettings(document.getElementById('pageContent'));
+    if (currentPage === 'users') {
+      renderUsers(document.getElementById('pageContent'));
+    } else {
+      renderSettings(document.getElementById('pageContent'));
+    }
   });
+}
+
+function openResetPasswordModal(userId, email) {
+  openModal(`
+    <div class="p-6">
+      <h3 class="text-lg font-bold text-white mb-2">Сброс пароля</h3>
+      <p class="text-xs text-surface-200 mb-4">${escapeHtml(email)}</p>
+      <form id="resetPasswordForm" class="space-y-3">
+        <div><label class="block text-xs text-surface-200 mb-1">Новый пароль</label>
+          <input type="password" id="resetPasswordValue" class="input-dark w-full px-3 py-2 rounded-lg text-sm" minlength="6" required></div>
+        <div class="flex gap-2 pt-2">
+          <button type="submit" class="btn-primary flex-1 py-2 rounded-lg text-white text-sm font-medium">Сохранить</button>
+          <button type="button" onclick="closeModal()" class="flex-1 py-2 rounded-lg text-surface-200 bg-surface-700 text-sm">Отмена</button>
+        </div>
+      </form>
+    </div>
+  `);
+  document.getElementById('resetPasswordForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    await api.post(`/users/${userId}/reset-password`, {
+      password: document.getElementById('resetPasswordValue').value,
+    });
+    closeModal();
+    renderUsers(document.getElementById('pageContent'));
+  });
+}
+
+async function toggleUserActive(userId, isActive) {
+  await api.patch(`/users/${userId}`, { isActive });
+  await loadUsersTable();
 }
 
 // ============================================================

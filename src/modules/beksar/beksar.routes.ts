@@ -1,6 +1,7 @@
 import { Router, Response, NextFunction } from 'express';
 import multer from 'multer';
 import { authMiddleware } from '../../middleware/auth.js';
+import { requireOwner } from '../../middleware/roles.js';
 import { AuthenticatedRequest } from '../../types/express.d.js';
 import { BeksarFileValidationError, STATUS_STORE_ID } from './beksar.parser.js';
 import { beksarService, DuplicateImportError } from './beksar.service.js';
@@ -24,6 +25,7 @@ const upload = multer({
 });
 
 router.use(authMiddleware);
+router.use(requireOwner);
 
 const ftpSyncSchema = z.object({
   storeId: z.coerce.number().int().refine((value): value is 1 | 2 => value === 1 || value === 2, {
@@ -160,10 +162,6 @@ function validateStatusUpload(req: AuthenticatedRequest) {
   const requestedStoreId = Number(req.body.storeId ?? STATUS_STORE_ID);
   if (requestedStoreId !== STATUS_STORE_ID) {
     return { status: 400, code: 'STATUS_ONLY', message: 'Beksar Stage 1 supports Status only' };
-  }
-
-  if (req.user.role === 'employee' && req.user.storeId !== STATUS_STORE_ID) {
-    return { status: 403, code: 'FORBIDDEN_STORE', message: 'Access denied to Status imports' };
   }
 
   return null;

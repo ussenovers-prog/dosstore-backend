@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { usersService } from './users.service.js';
-import { CreateUserInput, UpdateUserInput, UserQueryInput } from './users.schema.js';
+import { CreateUserInput, ResetPasswordInput, UpdateUserInput, UserQueryInput } from './users.schema.js';
 
 class UsersController {
   async list(req: Request, res: Response, next: NextFunction): Promise<void> {
@@ -49,6 +49,17 @@ class UsersController {
       const id = parseInt(req.params.id, 10);
       const result = await usersService.deactivate(id);
       res.json({ data: result });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async resetPassword(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const id = parseInt(req.params.id, 10);
+      const input = req.body as ResetPasswordInput;
+      const user = await usersService.resetPassword(id, input);
+      res.json({ data: user });
     } catch (error) {
       next(error);
     }

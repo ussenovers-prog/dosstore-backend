@@ -2,12 +2,14 @@ import { Router } from 'express';
 import prisma from '../../utils/prisma.js';
 import { authMiddleware } from '../../middleware/auth.js';
 import { storeAccessMiddleware, getEffectiveStoreId } from '../../middleware/storeAccess.js';
+import { requireOwner } from '../../middleware/roles.js';
 import { AuthenticatedRequest } from '../../types/express.d.js';
 import { Response, NextFunction } from 'express';
 
 const router = Router();
 
 router.use(authMiddleware);
+router.use(requireOwner);
 router.use(storeAccessMiddleware);
 
 /**

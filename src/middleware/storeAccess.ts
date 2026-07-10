@@ -7,7 +7,7 @@ import { AuthenticatedRequest } from '../types/express.d.js';
  * - Employee: can only access their assigned store
  *
  * For query params: if employee tries to access another store, return 403.
- * If employee doesn't specify store_id, auto-set to their store.
+ * If employee doesn't specify storeId, auto-set to their store.
  */
 export function storeAccessMiddleware(
   req: AuthenticatedRequest,
@@ -44,8 +44,8 @@ export function storeAccessMiddleware(
   }
 
   // Check query params
-  const queryStoreId = req.query.store_id
-    ? parseInt(req.query.store_id as string, 10)
+  const queryStoreId = req.query.storeId
+    ? parseInt(req.query.storeId as string, 10)
     : null;
 
   if (queryStoreId && queryStoreId !== employeeStoreId) {
@@ -73,18 +73,18 @@ export function storeAccessMiddleware(
     return;
   }
 
-  // Auto-set store_id in query/body for employees
+  // Auto-set storeId in query/body for employees
   if (req.query) {
-    req.query.store_id = String(employeeStoreId);
+    req.query.storeId = String(employeeStoreId);
   }
 
   next();
 }
 
 /**
- * Helper to get the effective store_id for a request.
- * For owner: returns store_id from query/params or null (all stores).
- * For employee: always returns their assigned store_id.
+ * Helper to get the effective storeId for a request.
+ * For owner: returns storeId from query/params or null (all stores).
+ * For employee: always returns their assigned storeId.
  */
 export function getEffectiveStoreId(
   user: AuthenticatedRequest['user'],

@@ -28,6 +28,7 @@ class ExpensesService {
         include: {
           store: { select: { id: true, name: true } },
           creator: { select: { id: true, fullName: true } },
+          editor: { select: { id: true, fullName: true } },
         },
       }),
       prisma.expense.count({ where }),
@@ -45,6 +46,7 @@ class ExpensesService {
       include: {
         store: { select: { id: true, name: true } },
         creator: { select: { id: true, fullName: true } },
+        editor: { select: { id: true, fullName: true } },
       },
     });
 
@@ -71,13 +73,15 @@ class ExpensesService {
       },
       include: {
         store: { select: { id: true, name: true } },
+        creator: { select: { id: true, fullName: true } },
+        editor: { select: { id: true, fullName: true } },
       },
     });
 
     return expense;
   }
 
-  async update(id: number, input: UpdateExpenseInput) {
+  async update(id: number, input: UpdateExpenseInput, userId: number) {
     const expense = await prisma.expense.findUnique({ where: { id } });
     if (!expense) throw new NotFoundError('Expense');
 
@@ -91,9 +95,12 @@ class ExpensesService {
         ...(input.isRecurring !== undefined && { isRecurring: input.isRecurring }),
         ...(input.campaignName !== undefined && { campaignName: input.campaignName }),
         ...(input.channel !== undefined && { channel: input.channel }),
+        updatedBy: userId,
       },
       include: {
         store: { select: { id: true, name: true } },
+        creator: { select: { id: true, fullName: true } },
+        editor: { select: { id: true, fullName: true } },
       },
     });
 
