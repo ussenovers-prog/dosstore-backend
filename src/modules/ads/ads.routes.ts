@@ -4,6 +4,7 @@ import { authMiddleware } from '../../middleware/auth.js';
 import { requireEmployeeOrOwner, requireOwner } from '../../middleware/roles.js';
 import { AuthenticatedRequest } from '../../types/express.d.js';
 import { adsService, DuplicateAdsImportError } from './ads.service.js';
+import { AdsImportError } from './ads.parser.js';
 
 const router = Router();
 const upload = multer({
@@ -37,6 +38,31 @@ router.post('/import', requireOwner, upload.single('file'), async (
     if (error instanceof DuplicateAdsImportError) {
       res.status(409).json({
         error: { code: 'DUPLICATE_IMPORT', message: error.message },
+      });
+      return;
+    }
+    if (error instanceof AdsImportError) {
+      res.status(error.statusCode).json({
+        error: { code: error.code, message: error.message },
+      });
+      return;
+    }
+    next(error);
+  }
+});
+
+router.post('/sync/google-sheet', requireOwner, async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const result = await adsService.syncGoogleSheet();
+    res.status(201).json({ data: result });
+  } catch (error) {
+    if (error instanceof AdsImportError) {
+      res.status(error.statusCode).json({
+        error: { code: error.code, message: error.message },
       });
       return;
     }

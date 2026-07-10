@@ -7,6 +7,8 @@
     "start": "npx tsx src/index.ts",
     "db:migrate": "prisma migrate deploy",
     "db:seed": "tsx prisma/seed.ts",
+    "ads:sync": "tsx scripts/sync-google-ads.ts",
+    "test:ads-parser": "tsx tests/ads-parser.test.ts",
     "test:beksar-inventory": "tsx tests/beksar-inventory-parser.test.ts"
   },
   "dependencies": {

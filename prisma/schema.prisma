@@ -240,22 +240,25 @@ model Expense {
 // ============================================================
 
 model AdvertisingExpense {
-  id          Int      @id @default(autoincrement())
-  date        DateTime
-  storeId     Int?
-  storeName   String
-  platform    String
-  source      String
-  amount      Float
-  currency    String
-  description String?
-  fileName    String
-  fileHash    String
-  createdAt   DateTime @default(now())
+  id           Int      @id @default(autoincrement())
+  date         DateTime
+  storeId      Int?
+  storeName    String
+  platform     String
+  source       String
+  campaignName String?
+  amount       Float
+  currency     String
+  description  String?
+  fileName     String
+  fileHash     String
+  sourceKey    String?
+  createdAt    DateTime @default(now())
 
   store Store? @relation(fields: [storeId], references: [id], onDelete: SetNull)
 
   @@unique([fileHash, date, storeName, source])
+  @@unique([sourceKey])
   @@index([date])
   @@index([storeId])
   @@index([fileHash])

@@ -49,7 +49,10 @@ const envSchema = z.object({
 
   // Google Sheets
   GOOGLE_SHEETS_CREDENTIALS_PATH: z.string().optional(),
-  GOOGLE_SHEETS_AD_SPREADSHEET_ID: z.string().optional(),
+  GOOGLE_SHEETS_AD_SPREADSHEET_ID: z.string().default('1WK4x-u-m9rMXMhtGHAk1KHd4zatgppwMpHjwv9RNZZQ'),
+  GOOGLE_SHEETS_AD_GID: z.string().default('2053740277'),
+  GOOGLE_SHEETS_AD_SYNC_ENABLED: z.string().default('true').transform((value) => value.toLowerCase() === 'true'),
+  GOOGLE_SHEETS_AD_SYNC_INTERVAL_MS: z.coerce.number().int().positive().default(900000),
   GOOGLE_SHEETS_AD_RANGE: z.string().default('Sheet1!A:F'),
   GOOGLE_SHEETS_SYNC_INTERVAL_MS: z.coerce.number().int().default(3600000),
 });

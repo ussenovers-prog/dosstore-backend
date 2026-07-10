@@ -22,6 +22,7 @@ import importsRoutes from './modules/imports/imports.routes.js';
 import beksarRoutes from './modules/beksar/beksar.routes.js';
 import systemRoutes from './modules/system/system.routes.js';
 import adsRoutes from './modules/ads/ads.routes.js';
+import { adsScheduler } from './modules/ads/ads.scheduler.js';
 
 // Import services (optional background tasks)
 // import { ftpWatcher } from './services/ftp/ftp-watcher.service.js';
@@ -161,6 +162,8 @@ app.listen(env.PORT, '0.0.0.0', () => {
   // if (env.FTP_HOST) {
   //   ftpWatcher.start().catch(console.error);
   // }
+
+  adsScheduler.start();
 });
 
 // ============================================================
@@ -170,11 +173,13 @@ app.listen(env.PORT, '0.0.0.0', () => {
 process.on('SIGTERM', () => {
   console.log('SIGTERM received, shutting down gracefully...');
   // ftpWatcher.stop();
+  adsScheduler.stop();
   process.exit(0);
 });
 
 process.on('SIGINT', () => {
   console.log('SIGINT received, shutting down gracefully...');
   // ftpWatcher.stop();
+  adsScheduler.stop();
   process.exit(0);
 });

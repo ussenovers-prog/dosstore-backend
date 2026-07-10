@@ -73,7 +73,8 @@ export async function getNetProfit(filter: DateFilter): Promise<number> {
   });
 
   const totalExpenses = toNumber(expensesResult._sum.amount);
-  return grossProfit - totalExpenses;
+  const adSpend = await getAdvertisingExpenseSpend(filter);
+  return grossProfit - totalExpenses - adSpend;
 }
 
 export async function getAvgCheck(filter: DateFilter): Promise<number> {
@@ -111,6 +112,20 @@ export async function getAdSpend(filter: DateFilter): Promise<number> {
   if (dateFilter) where.expenseDate = dateFilter;
 
   const result = await prisma.expense.aggregate({
+    where,
+    _sum: { amount: true },
+  });
+
+  return toNumber(result._sum.amount) + await getAdvertisingExpenseSpend(filter);
+}
+
+export async function getAdvertisingExpenseSpend(filter: DateFilter): Promise<number> {
+  const dateFilter = buildDateFilter(filter.dateFrom, filter.dateTo);
+  const where: Prisma.AdvertisingExpenseWhereInput = {};
+  if (filter.storeId) where.storeId = filter.storeId;
+  if (dateFilter) where.date = dateFilter;
+
+  const result = await prisma.advertisingExpense.aggregate({
     where,
     _sum: { amount: true },
   });
@@ -464,8 +479,20 @@ export async function getExpenseBreakdown(filter: DateFilter) {
     _sum: { amount: true },
   });
 
-  return results.map((r) => ({
+  const breakdown = results.map((r) => ({
     category: r.category,
     total: toNumber(r._sum.amount),
   }));
+
+  const importedAdSpend = await getAdvertisingExpenseSpend(filter);
+  if (importedAdSpend > 0) {
+    const existingTargetAds = breakdown.find((item) => item.category === 'target_ads');
+    if (existingTargetAds) {
+      existingTargetAds.total += importedAdSpend;
+    } else {
+      breakdown.push({ category: 'target_ads', total: importedAdSpend });
+    }
+  }
+
+  return breakdown;
 }
