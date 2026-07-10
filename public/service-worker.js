@@ -1,11 +1,14 @@
-const CACHE_NAME = 'dosstore-analytics-v1';
+const CACHE_NAME = 'ers-group-v2';
 const APP_SHELL = [
   '/',
   '/index.html',
   '/manifest.webmanifest',
-  '/icons/dosstore-analytics.svg',
-  '/icons/dosstore-analytics-192.png',
-  '/icons/dosstore-analytics-512.png',
+  '/favicon.ico',
+  '/icons/favicon-32.png',
+  '/icons/ers-group-logo.png',
+  '/icons/icon-192.png',
+  '/icons/icon-512.png',
+  '/icons/icon-maskable-512.png',
   '/icons/apple-touch-icon.png',
 ];
 

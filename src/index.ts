@@ -101,7 +101,7 @@ app.use(errorHandler);
 app.listen(env.PORT, '0.0.0.0', () => {
   console.log(`
 ╔═══════════════════════════════════════════════════════════╗
-║  Dosstore Analytics API                                   ║
+║  ERS GROUP API                                            ║
 ║  Server running on http://0.0.0.0:${env.PORT}                ║
 ║  Environment: ${env.NODE_ENV.padEnd(42)}║
 ╚═══════════════════════════════════════════════════════════╝

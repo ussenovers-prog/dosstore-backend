@@ -1,7 +1,7 @@
 {
-  "name": "Dosstore Analytics",
-  "short_name": "Dosstore",
-  "description": "Dosstore financial and operations analytics",
+  "name": "ERS GROUP",
+  "short_name": "ERS GROUP",
+  "description": "ERS GROUP financial and operations analytics",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
@@ -10,16 +10,22 @@
   "orientation": "portrait",
   "icons": [
     {
-      "src": "/icons/dosstore-analytics-192.png",
+      "src": "/icons/icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
     },
     {
-      "src": "/icons/dosstore-analytics-512.png",
+      "src": "/icons/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     },
     {
       "src": "/icons/apple-touch-icon.png",
