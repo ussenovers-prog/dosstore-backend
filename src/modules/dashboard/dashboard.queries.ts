@@ -10,8 +10,8 @@ export interface DateFilter {
 function buildDateFilter(dateFrom?: string, dateTo?: string): Prisma.DateTimeFilter | undefined {
   if (!dateFrom && !dateTo) return undefined;
   const filter: Prisma.DateTimeFilter = {};
-  if (dateFrom) filter.gte = new Date(dateFrom);
-  if (dateTo) filter.lte = new Date(dateTo);
+  if (dateFrom) filter.gte = new Date(`${dateFrom}T00:00:00.000Z`);
+  if (dateTo) filter.lte = new Date(`${dateTo}T23:59:59.999Z`);
   return filter;
 }
 
@@ -336,21 +336,7 @@ export async function getConversion(filter: DateFilter): Promise<number> {
 // ============================================================
 
 export async function getInventorySummary(filter: DateFilter) {
-  const where: Prisma.InventoryWhereInput = {};
-  if (filter.storeId) where.storeId = filter.storeId;
-
-  const latestSnapshots = await prisma.inventory.groupBy({
-    by: ['storeId'],
-    where,
-    _max: { snapshotDate: true },
-  });
-
-  const currentSnapshots = latestSnapshots
-    .filter((snapshot) => snapshot._max.snapshotDate)
-    .map((snapshot) => ({
-      storeId: snapshot.storeId,
-      snapshotDate: snapshot._max.snapshotDate as Date,
-    }));
+  const currentSnapshots = await getCurrentInventorySnapshots(filter.storeId);
 
   if (currentSnapshots.length === 0) {
     return {
@@ -444,23 +430,16 @@ export async function getNoMovementProducts(filter: DateFilter, days: number = 3
 }
 
 export async function getLowStockProducts(filter: DateFilter, threshold: number = 5) {
-  const where: Prisma.InventoryWhereInput = {
-    quantity: { lte: threshold },
-  };
-  if (filter.storeId) where.storeId = filter.storeId;
-
-  const latestSnapshot = await prisma.inventory.findFirst({
-    where: { storeId: filter.storeId },
-    orderBy: { snapshotDate: 'desc' },
-    select: { snapshotDate: true },
-  });
-
-  if (!latestSnapshot) return [];
+  const currentSnapshots = await getCurrentInventorySnapshots(filter.storeId);
+  if (currentSnapshots.length === 0) return [];
 
   const items = await prisma.inventory.findMany({
     where: {
-      ...where,
-      snapshotDate: latestSnapshot.snapshotDate,
+      quantity: { lte: threshold },
+      OR: currentSnapshots.map((snapshot) => ({
+        storeId: snapshot.storeId,
+        snapshotDate: snapshot.snapshotDate,
+      })),
     },
     include: {
       product: { select: { id: true, name: true, article: true, brand: true } },
@@ -476,6 +455,40 @@ export async function getLowStockProducts(filter: DateFilter, threshold: number 
     quantity: item.quantity,
     totalValue: toNumber(item.totalValue),
   }));
+}
+
+async function getCurrentInventorySnapshots(storeId?: number) {
+  const where: Prisma.InventoryWhereInput = {};
+  if (storeId) where.storeId = storeId;
+
+  const snapshots = await prisma.inventory.groupBy({
+    by: ['storeId', 'snapshotDate'],
+    where,
+    _count: { _all: true },
+    orderBy: [{ storeId: 'asc' }, { snapshotDate: 'desc' }],
+  });
+
+  const maxRowsByStore = new Map<number, number>();
+  for (const snapshot of snapshots) {
+    const currentMax = maxRowsByStore.get(snapshot.storeId) ?? 0;
+    maxRowsByStore.set(snapshot.storeId, Math.max(currentMax, snapshot._count._all));
+  }
+
+  const selected = new Map<number, { storeId: number; snapshotDate: Date }>();
+  for (const snapshot of snapshots) {
+    if (selected.has(snapshot.storeId)) continue;
+
+    const maxRows = maxRowsByStore.get(snapshot.storeId) ?? 0;
+    const minimumCompleteRows = Math.max(1, Math.floor(maxRows * 0.75));
+    if (snapshot._count._all < minimumCompleteRows) continue;
+
+    selected.set(snapshot.storeId, {
+      storeId: snapshot.storeId,
+      snapshotDate: snapshot.snapshotDate,
+    });
+  }
+
+  return Array.from(selected.values());
 }
 
 export async function getInventoryTurnover(filter: DateFilter): Promise<number> {
