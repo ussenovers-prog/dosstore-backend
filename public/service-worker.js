@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ers-group-v6-mobile-filters';
+const CACHE_NAME = 'ers-group-v7-mobile-workflow';
 const APP_SHELL = [
   '/',
   '/index.html',

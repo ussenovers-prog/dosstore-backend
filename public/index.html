@@ -161,7 +161,7 @@ body { padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inse
           <p class="text-xs text-surface-200 truncate" id="userEmail"><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="3b544c555e497b5e435a564b575e15585456">[email&#160;protected]</a></p>
         </div>
       </div>
-      <button onclick="logout()" class="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs text-surface-200 hover:text-danger-400 hover:bg-danger-500/10 transition-colors">
+      <button data-action="logout" onclick="logout()" class="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs text-surface-200 hover:text-danger-400 hover:bg-danger-500/10 transition-colors">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
         Выйти
       </button>
@@ -359,6 +359,7 @@ function getDemoData(method, path) {
 let currentPage = 'dashboard';
 let charts = {};
 let lastTouchNavigationAt = 0;
+let lastTouchActionAt = 0;
 const pageTitles = { dashboard:'Dashboard', sales:'Продажи', inventory:'Остатки', expenses:'Расходы', visitors:'Посетители', abc:'ABC-анализ', imports:'Импорты', users:'Пользователи', settings:'Настройки' };
 
 function getFilters() {
@@ -540,6 +541,32 @@ function handleMobileMenuButton(event) {
   event.preventDefault();
   event.stopPropagation();
   toggleSidebar();
+}
+
+function handleActionButton(event) {
+  const button = event.target.closest?.('[data-action]');
+  if (!button) return;
+
+  if (event.type === 'click' && Date.now() - lastTouchActionAt < 700) {
+    event.preventDefault();
+    event.stopPropagation();
+    return;
+  }
+
+  if (event.type === 'touchend') {
+    lastTouchActionAt = Date.now();
+  }
+
+  const action = button.dataset.action;
+  if (!action) return;
+
+  event.preventDefault();
+  event.stopPropagation();
+
+  if (action === 'logout') logout();
+  if (action === 'close-modal') closeModal();
+  if (action === 'open-expense-modal') openExpenseModal();
+  if (action === 'open-user-modal') openUserModal();
 }
 
 function logout() {
@@ -919,7 +946,7 @@ async function renderExpenses(el) {
           <option value="other">Прочее</option>
         </select>
       </div>
-      <button onclick="openExpenseModal()" class="btn-primary px-4 py-2 rounded-lg text-white text-xs font-medium">+ Добавить расход</button>
+      <button data-action="open-expense-modal" onclick="openExpenseModal()" class="btn-primary px-4 py-2 rounded-lg text-white text-xs font-medium">+ Добавить расход</button>
     </div>
     <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
       <div class="bg-surface-800 rounded-xl border border-surface-700 p-4">
@@ -1000,7 +1027,7 @@ function openAdsImportModal() {
         <div id="adsImportError" class="hidden text-danger-400 text-sm bg-danger-500/10 border border-danger-500/20 rounded-lg px-4 py-3"></div>
         <div class="flex gap-2 pt-2">
           <button type="submit" class="btn-primary flex-1 py-2 rounded-lg text-white text-sm font-medium">Импортировать</button>
-          <button type="button" onclick="closeModal()" class="flex-1 py-2 rounded-lg text-surface-200 bg-surface-700 text-sm">Отмена</button>
+          <button type="button" data-action="close-modal" onclick="closeModal()" class="flex-1 py-2 rounded-lg text-surface-200 bg-surface-700 text-sm">Отмена</button>
         </div>
       </form>
     </div>
@@ -1061,7 +1088,7 @@ function openExpenseModal() {
         <div class="flex items-center gap-2"><input type="checkbox" id="expRecurring" class="rounded"><label for="expRecurring" class="text-xs text-surface-200">Постоянный расход</label></div>
         <div class="flex gap-2 pt-2">
           <button type="submit" class="btn-primary flex-1 py-2 rounded-lg text-white text-sm font-medium">Сохранить</button>
-          <button type="button" onclick="closeModal()" class="flex-1 py-2 rounded-lg text-surface-200 bg-surface-700 text-sm">Отмена</button>
+          <button type="button" data-action="close-modal" onclick="closeModal()" class="flex-1 py-2 rounded-lg text-surface-200 bg-surface-700 text-sm">Отмена</button>
         </div>
       </form>
     </div>
@@ -1721,7 +1748,7 @@ async function renderUsers(el) {
   el.innerHTML = `<div class="fade-in">
     <div class="flex items-center justify-between gap-3 mb-4">
       <h3 class="text-sm font-semibold text-white">Управление пользователями</h3>
-      <button onclick="openUserModal()" class="btn-primary px-4 py-2 rounded-lg text-white text-xs font-medium">+ Добавить</button>
+      <button data-action="open-user-modal" onclick="openUserModal()" class="btn-primary px-4 py-2 rounded-lg text-white text-xs font-medium">+ Добавить</button>
     </div>
     <div class="bg-surface-800 rounded-xl border border-surface-700 p-4">
       <div class="overflow-x-auto">
@@ -1793,7 +1820,7 @@ async function renderSettings(el) {
     <div class="bg-surface-800 rounded-xl border border-surface-700 p-6 mb-6">
       <h3 class="text-sm font-semibold text-white mb-4">Пользователи</h3>
       <div class="flex justify-end mb-3">
-        <button onclick="openUserModal()" class="btn-primary px-4 py-2 rounded-lg text-white text-xs font-medium">+ Добавить</button>
+        <button data-action="open-user-modal" onclick="openUserModal()" class="btn-primary px-4 py-2 rounded-lg text-white text-xs font-medium">+ Добавить</button>
       </div>
       <div class="overflow-x-auto">
         <table class="table-dark w-full text-sm">
@@ -1888,7 +1915,7 @@ function openUserModal() {
           <select id="newUserStore" class="input-dark w-full px-3 py-2 rounded-lg text-sm"><option value="">Не назначен</option><option value="1">Dosstore</option><option value="2">Status</option></select></div>
         <div class="flex gap-2 pt-2">
           <button type="submit" class="btn-primary flex-1 py-2 rounded-lg text-white text-sm font-medium">Создать</button>
-          <button type="button" onclick="closeModal()" class="flex-1 py-2 rounded-lg text-surface-200 bg-surface-700 text-sm">Отмена</button>
+          <button type="button" data-action="close-modal" onclick="closeModal()" class="flex-1 py-2 rounded-lg text-surface-200 bg-surface-700 text-sm">Отмена</button>
         </div>
       </form>
     </div>
@@ -2010,8 +2037,10 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
 
 document.addEventListener('click', handleSidebarLinkActivation);
 document.addEventListener('click', handleMobileMenuButton);
+document.addEventListener('click', handleActionButton);
 document.addEventListener('touchend', handleSidebarLinkActivation, { passive: false });
 document.addEventListener('touchend', handleMobileMenuButton, { passive: false });
+document.addEventListener('touchend', handleActionButton, { passive: false });
 window.addEventListener('hashchange', () => navigate());
 window.addEventListener('popstate', () => navigate());
 
