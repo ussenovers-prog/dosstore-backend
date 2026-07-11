@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ers-group-v5-navigation';
+const CACHE_NAME = 'ers-group-v6-mobile-filters';
 const APP_SHELL = [
   '/',
   '/index.html',

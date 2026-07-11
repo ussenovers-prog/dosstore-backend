@@ -5,6 +5,7 @@ import { storeAccessMiddleware, getEffectiveStoreId } from '../../middleware/sto
 import { requireOwner } from '../../middleware/roles.js';
 import { AuthenticatedRequest } from '../../types/express.d.js';
 import { Response, NextFunction } from 'express';
+import { withNestedDisplayStoreName } from '../../utils/storeDisplay.js';
 
 const router = Router();
 
@@ -45,7 +46,7 @@ router.get('/', async (req: AuthenticatedRequest, res: Response, next: NextFunct
     ]);
 
     res.json({
-      data: imports,
+      data: imports.map(withNestedDisplayStoreName),
       meta: {
         page,
         limit,
@@ -119,7 +120,7 @@ router.get('/:id', async (req: AuthenticatedRequest, res: Response, next: NextFu
       return;
     }
 
-    res.json({ data: importLog });
+    res.json({ data: withNestedDisplayStoreName(importLog) });
   } catch (error) {
     next(error);
   }

@@ -2,6 +2,7 @@ import prisma from '../../utils/prisma.js';
 import { CreateExpenseInput, UpdateExpenseInput, ExpenseQueryInput } from './expenses.schema.js';
 import { NotFoundError } from '../../middleware/errorHandler.js';
 import { Prisma } from '@prisma/client';
+import { withNestedDisplayStoreName } from '../../utils/storeDisplay.js';
 
 class ExpensesService {
   async list(query: ExpenseQueryInput) {
@@ -15,8 +16,8 @@ class ExpensesService {
     if (source) where.source = source;
     if (dateFrom || dateTo) {
       where.expenseDate = {};
-      if (dateFrom) where.expenseDate.gte = new Date(dateFrom);
-      if (dateTo) where.expenseDate.lte = new Date(dateTo);
+      if (dateFrom) where.expenseDate.gte = new Date(`${dateFrom}T00:00:00.000Z`);
+      if (dateTo) where.expenseDate.lte = new Date(`${dateTo}T23:59:59.999Z`);
     }
 
     const [expenses, total] = await Promise.all([
@@ -35,7 +36,7 @@ class ExpensesService {
     ]);
 
     return {
-      data: expenses,
+      data: expenses.map(withNestedDisplayStoreName),
       meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
     };
   }
@@ -51,7 +52,7 @@ class ExpensesService {
     });
 
     if (!expense) throw new NotFoundError('Expense');
-    return expense;
+    return withNestedDisplayStoreName(expense);
   }
 
   async create(input: CreateExpenseInput, userId: number) {
@@ -78,7 +79,7 @@ class ExpensesService {
       },
     });
 
-    return expense;
+    return withNestedDisplayStoreName(expense);
   }
 
   async update(id: number, input: UpdateExpenseInput, userId: number) {
@@ -104,7 +105,7 @@ class ExpensesService {
       },
     });
 
-    return updated;
+    return withNestedDisplayStoreName(updated);
   }
 
   async delete(id: number) {

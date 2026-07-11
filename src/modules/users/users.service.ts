@@ -2,6 +2,7 @@ import prisma from '../../utils/prisma.js';
 import { hashPassword } from '../../utils/password.js';
 import { CreateUserInput, ResetPasswordInput, UpdateUserInput, UserQueryInput } from './users.schema.js';
 import { AppError, NotFoundError } from '../../middleware/errorHandler.js';
+import { withNestedDisplayStoreName } from '../../utils/storeDisplay.js';
 
 class UsersService {
   async list(query: UserQueryInput) {
@@ -34,7 +35,7 @@ class UsersService {
     ]);
 
     return {
-      data: users,
+      data: users.map(withNestedDisplayStoreName),
       meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
     };
   }
@@ -55,7 +56,7 @@ class UsersService {
     });
 
     if (!user) throw new NotFoundError('User');
-    return user;
+    return withNestedDisplayStoreName(user);
   }
 
   async create(input: CreateUserInput) {

@@ -1,5 +1,6 @@
 import prisma from '../../utils/prisma.js';
 import { Prisma } from '@prisma/client';
+import { displayStoreName } from '../../utils/storeDisplay.js';
 
 export interface DateFilter {
   storeId?: number;
@@ -687,7 +688,7 @@ export async function getStoresComparison(filter: DateFilter) {
 
       return {
         storeId: store.id,
-        storeName: store.name,
+        storeName: displayStoreName(store),
         revenue: metrics.revenue,
         grossProfit: metrics.grossProfit,
         netProfit: metrics.netProfit,

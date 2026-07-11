@@ -11,6 +11,7 @@ import {
   ParsedAdvertisingExpense,
   ParsedAdvertisingSheet,
 } from './ads.parser.js';
+import { displayStoreName } from '../../utils/storeDisplay.js';
 
 export class DuplicateAdsImportError extends Error {
   constructor() {
@@ -101,7 +102,7 @@ class AdsService {
       take: 500,
     });
 
-    return { data };
+    return { data: data.map((item) => ({ ...item, storeName: displayStoreName({ id: item.storeId, name: item.storeName }) })) };
   }
 
   async summary(storeId?: number | null) {
@@ -118,7 +119,8 @@ class AdsService {
     for (const row of rows) {
       const amount = Number(row._sum.amount ?? 0);
       totalAds += amount;
-      byStore[row.storeName] = (byStore[row.storeName] ?? 0) + amount;
+      const storeName = displayStoreName(row.storeName);
+      byStore[storeName] = (byStore[storeName] ?? 0) + amount;
       bySource[row.source] = (bySource[row.source] ?? 0) + amount;
     }
 

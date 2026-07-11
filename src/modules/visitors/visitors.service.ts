@@ -1,6 +1,7 @@
 import prisma from '../../utils/prisma.js';
 import { CreateVisitorInput, UpdateVisitorInput, VisitorQueryInput } from './visitors.schema.js';
 import { NotFoundError } from '../../middleware/errorHandler.js';
+import { withNestedDisplayStoreName } from '../../utils/storeDisplay.js';
 import { Prisma } from '@prisma/client';
 
 class VisitorsService {
@@ -12,8 +13,8 @@ class VisitorsService {
     if (storeId) where.storeId = storeId;
     if (dateFrom || dateTo) {
       where.visitDate = {};
-      if (dateFrom) where.visitDate.gte = new Date(dateFrom);
-      if (dateTo) where.visitDate.lte = new Date(dateTo);
+      if (dateFrom) where.visitDate.gte = new Date(`${dateFrom}T00:00:00.000Z`);
+      if (dateTo) where.visitDate.lte = new Date(`${dateTo}T23:59:59.999Z`);
     }
 
     const [visitors, total] = await Promise.all([
@@ -31,7 +32,7 @@ class VisitorsService {
     ]);
 
     return {
-      data: visitors,
+      data: visitors.map(withNestedDisplayStoreName),
       meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
     };
   }
@@ -46,7 +47,7 @@ class VisitorsService {
     });
 
     if (!visitor) throw new NotFoundError('Visitor record');
-    return visitor;
+    return withNestedDisplayStoreName(visitor);
   }
 
   async upsert(input: CreateVisitorInput, userId: number) {
@@ -79,7 +80,7 @@ class VisitorsService {
       },
     });
 
-    return visitor;
+    return withNestedDisplayStoreName(visitor);
   }
 
   async update(id: number, input: UpdateVisitorInput) {
@@ -97,7 +98,7 @@ class VisitorsService {
       },
     });
 
-    return updated;
+    return withNestedDisplayStoreName(updated);
   }
 
   async delete(id: number) {

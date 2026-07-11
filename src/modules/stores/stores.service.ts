@@ -1,6 +1,7 @@
 import prisma from '../../utils/prisma.js';
 import { CreateStoreInput, UpdateStoreInput } from './stores.schema.js';
 import { AppError, NotFoundError } from '../../middleware/errorHandler.js';
+import { withDisplayStoreName } from '../../utils/storeDisplay.js';
 
 class StoresService {
   async list() {
@@ -22,7 +23,7 @@ class StoresService {
       },
     });
 
-    return { data: stores };
+    return { data: stores.map(withDisplayStoreName) };
   }
 
   async getById(id: number) {
@@ -45,7 +46,7 @@ class StoresService {
     });
 
     if (!store) throw new NotFoundError('Store');
-    return store;
+    return withDisplayStoreName(store);
   }
 
   async create(input: CreateStoreInput) {
@@ -64,7 +65,7 @@ class StoresService {
       },
     });
 
-    return store;
+    return withDisplayStoreName(store);
   }
 
   async update(id: number, input: UpdateStoreInput) {
@@ -84,7 +85,7 @@ class StoresService {
       },
     });
 
-    return updated;
+    return withDisplayStoreName(updated);
   }
 
   async deactivate(id: number) {

@@ -4,6 +4,7 @@ import prisma from '../../utils/prisma.js';
 import { authMiddleware } from '../../middleware/auth.js';
 import { requireOwner } from '../../middleware/roles.js';
 import { AuthenticatedRequest } from '../../types/express.d.js';
+import { withDisplayStoreName } from '../../utils/storeDisplay.js';
 
 const router = Router();
 
@@ -82,7 +83,7 @@ router.get('/health', async (req: AuthenticatedRequest, res: Response, next: Nex
       return;
     }
 
-    health.statusStore = statusStore;
+    health.statusStore = withDisplayStoreName(statusStore);
 
     const latestSnapshot = await prisma.inventory.findFirst({
       where: { storeId: statusStore.id },
@@ -136,7 +137,7 @@ router.get('/health', async (req: AuthenticatedRequest, res: Response, next: Nex
 
     const dosstoreStore = await prisma.store.findFirst({
       where: {
-        OR: [{ code: 'dosstore' }, { name: 'Dosstore' }],
+        OR: [{ code: 'dosstore' }, { name: 'Dosstore' }, { name: 'Store 1' }, { id: 1 }],
       },
       select: {
         id: true,
@@ -147,7 +148,7 @@ router.get('/health', async (req: AuthenticatedRequest, res: Response, next: Nex
     });
 
     if (dosstoreStore) {
-      health.dosstoreStore = dosstoreStore;
+      health.dosstoreStore = withDisplayStoreName(dosstoreStore);
 
       const latestDosstoreSnapshot = await prisma.inventory.findFirst({
         where: { storeId: dosstoreStore.id },
