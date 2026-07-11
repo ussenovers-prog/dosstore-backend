@@ -171,7 +171,7 @@ body { padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inse
     <!-- Header -->
     <header class="h-14 bg-surface-800 border-b border-surface-700 flex items-center justify-between px-4 md:px-6 shrink-0">
       <div class="flex items-center gap-3">
-        <button id="mobileMenuButton" onclick="toggleSidebar()" class="md:hidden p-2 rounded-lg hover:bg-surface-700" aria-label="Открыть меню" aria-expanded="false">
+        <button id="mobileMenuButton" type="button" class="md:hidden p-2 rounded-lg hover:bg-surface-700" aria-label="Открыть меню" aria-expanded="false">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
         </button>
         <h1 class="text-lg font-semibold text-white" id="pageTitle">Dashboard</h1>
@@ -513,6 +513,14 @@ function handleSidebarLinkActivation(event) {
   event.preventDefault();
   event.stopPropagation();
   goToPage(link.dataset.page);
+}
+
+function handleMobileMenuButton(event) {
+  const button = event.target.closest?.('#mobileMenuButton');
+  if (!button) return;
+  event.preventDefault();
+  event.stopPropagation();
+  toggleSidebar();
 }
 
 function logout() {
@@ -1909,6 +1917,24 @@ function openModal(html) {
 function closeModal() {
   document.getElementById('modalOverlay').classList.add('hidden');
 }
+
+Object.assign(window, {
+  closeModal,
+  deleteExpense,
+  deleteVisitor,
+  loadSystemHealth,
+  logout,
+  onDateFilterChange,
+  onStoreFilterChange,
+  openAdsImportModal,
+  openExpenseModal,
+  openResetPasswordModal,
+  openUserModal,
+  openVisitorModal,
+  renderUsers,
+  toggleSidebar,
+  toggleUserActive,
+});
 document.addEventListener('click', (event) => {
   if (!(event.target instanceof Element)) return;
 
@@ -1949,7 +1975,9 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
 });
 
 document.addEventListener('click', handleSidebarLinkActivation);
+document.addEventListener('click', handleMobileMenuButton);
 document.addEventListener('touchend', handleSidebarLinkActivation, { passive: false });
+document.addEventListener('touchend', handleMobileMenuButton, { passive: false });
 window.addEventListener('hashchange', () => navigate());
 window.addEventListener('popstate', () => navigate());
 
