@@ -42,6 +42,7 @@ body { padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inse
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
 .sidebar-link { transition: all 0.15s ease; }
+.sidebar-link, #mobileMenuButton { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
 .sidebar-link:hover, .sidebar-link.active { background: rgba(56,189,248,0.08); color: #38bdf8; }
 .sidebar-link.active { border-right: 2px solid #38bdf8; }
 .kpi-card { transition: transform 0.2s ease, box-shadow 0.2s ease; }
@@ -170,7 +171,7 @@ body { padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inse
     <!-- Header -->
     <header class="h-14 bg-surface-800 border-b border-surface-700 flex items-center justify-between px-4 md:px-6 shrink-0">
       <div class="flex items-center gap-3">
-        <button onclick="toggleSidebar()" class="md:hidden p-2 rounded-lg hover:bg-surface-700">
+        <button id="mobileMenuButton" onclick="toggleSidebar()" class="md:hidden p-2 rounded-lg hover:bg-surface-700" aria-label="Открыть меню" aria-expanded="false">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
         </button>
         <h1 class="text-lg font-semibold text-white" id="pageTitle">Dashboard</h1>
@@ -346,6 +347,8 @@ function getDemoData(method, path) {
 // ============================================================
 let currentPage = 'dashboard';
 let charts = {};
+let lastTouchNavigationAt = 0;
+const pageTitles = { dashboard:'Dashboard', sales:'Продажи', inventory:'Остатки', expenses:'Расходы', visitors:'Посетители', abc:'ABC-анализ', imports:'Импорты', users:'Пользователи', settings:'Настройки' };
 
 function getFilters() {
   const storeId = document.getElementById('storeFilter').value;
@@ -407,6 +410,7 @@ function tableLoadingRow(colspan, label = 'Загрузка данных...') {
 function showLogin() {
   document.getElementById('loginScreen').classList.remove('hidden');
   document.getElementById('appShell').classList.add('hidden');
+  closeSidebar();
 }
 
 function showApp() {
@@ -426,22 +430,39 @@ function showApp() {
   navigate();
 }
 
-function navigate() {
-  let hash = window.location.hash.replace('#/', '') || 'dashboard';
-  if (!canAccessPage(hash)) {
-    hash = 'dashboard';
-    window.location.hash = '#/dashboard';
+function pageFromHash() {
+  const page = window.location.hash.replace('#/', '').replace('#', '');
+  return page || 'dashboard';
+}
+
+function navigate(pageOverride) {
+  let page = pageOverride || pageFromHash();
+  if (!canAccessPage(page)) {
+    page = 'dashboard';
+    if (window.location.hash !== '#/dashboard') {
+      history.replaceState(null, '', '#/dashboard');
+    }
   }
-  currentPage = hash;
+  currentPage = page;
   document.querySelectorAll('.sidebar-link').forEach(l => {
-    l.classList.toggle('active', l.dataset.page === hash);
+    l.classList.toggle('active', l.dataset.page === page);
   });
-  const titles = { dashboard:'Dashboard', sales:'Продажи', inventory:'Остатки', expenses:'Расходы', visitors:'Посетители', abc:'ABC-анализ', imports:'Импорты', users:'Пользователи', settings:'Настройки' };
-  document.getElementById('pageTitle').textContent = titles[hash] || 'Dashboard';
-  renderPage(hash);
-  // Close mobile sidebar
-  document.getElementById('sidebar').classList.remove('open');
-  document.getElementById('sidebarOverlay').classList.add('hidden');
+  document.getElementById('pageTitle').textContent = pageTitles[page] || 'Dashboard';
+  renderPage(page);
+  closeSidebar();
+}
+
+function goToPage(page, options = {}) {
+  const targetPage = canAccessPage(page) ? page : 'dashboard';
+  const targetHash = `#/${targetPage}`;
+  if (window.location.hash !== targetHash) {
+    if (options.replace) {
+      history.replaceState(null, '', targetHash);
+    } else {
+      history.pushState(null, '', targetHash);
+    }
+  }
+  navigate(targetPage);
 }
 
 function isOwner() { return api.user?.role === 'owner'; }
@@ -458,11 +479,40 @@ function applyRoleUi() {
   }
 }
 
+function closeSidebar() {
+  document.getElementById('sidebar')?.classList.remove('open');
+  document.getElementById('sidebarOverlay')?.classList.add('hidden');
+  document.body.classList.remove('overflow-hidden');
+  document.getElementById('mobileMenuButton')?.setAttribute('aria-expanded', 'false');
+}
+
 function toggleSidebar() {
   const sb = document.getElementById('sidebar');
   const ov = document.getElementById('sidebarOverlay');
-  sb.classList.toggle('open');
-  ov.classList.toggle('hidden');
+  const shouldOpen = !sb.classList.contains('open');
+  sb.classList.toggle('open', shouldOpen);
+  ov.classList.toggle('hidden', !shouldOpen);
+  document.body.classList.toggle('overflow-hidden', shouldOpen);
+  document.getElementById('mobileMenuButton')?.setAttribute('aria-expanded', shouldOpen ? 'true' : 'false');
+}
+
+function handleSidebarLinkActivation(event) {
+  const link = event.target.closest?.('.sidebar-link[data-page]');
+  if (!link) return;
+
+  if (event.type === 'click' && Date.now() - lastTouchNavigationAt < 700) {
+    event.preventDefault();
+    event.stopPropagation();
+    return;
+  }
+
+  if (event.type === 'touchend') {
+    lastTouchNavigationAt = Date.now();
+  }
+
+  event.preventDefault();
+  event.stopPropagation();
+  goToPage(link.dataset.page);
 }
 
 function logout() {
@@ -1898,7 +1948,10 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
   }
 });
 
-window.addEventListener('hashchange', navigate);
+document.addEventListener('click', handleSidebarLinkActivation);
+document.addEventListener('touchend', handleSidebarLinkActivation, { passive: false });
+window.addEventListener('hashchange', () => navigate());
+window.addEventListener('popstate', () => navigate());
 
 // Auto-login if token exists
 if (api.token) { showApp(); } else { showLogin(); }
