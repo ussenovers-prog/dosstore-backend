@@ -45,6 +45,100 @@ export async function getRevenue(filter: DateFilter): Promise<number> {
   return toNumber(result._sum.totalAmount);
 }
 
+export async function getFinancialMetrics(filter: DateFilter) {
+  const dateFilter = buildDateFilter(filter.dateFrom, filter.dateTo);
+  const saleWhere: Prisma.SaleWhereInput = {};
+  const expenseWhere: Prisma.ExpenseWhereInput = {};
+  const advertisingWhere: Prisma.AdvertisingExpenseWhereInput = {};
+  const visitorWhere: Prisma.VisitorWhereInput = {};
+
+  if (filter.storeId) {
+    saleWhere.storeId = filter.storeId;
+    expenseWhere.storeId = filter.storeId;
+    advertisingWhere.storeId = filter.storeId;
+    visitorWhere.storeId = filter.storeId;
+  }
+
+  if (dateFilter) {
+    saleWhere.saleDate = dateFilter;
+    expenseWhere.expenseDate = dateFilter;
+    advertisingWhere.date = dateFilter;
+    visitorWhere.visitDate = dateFilter;
+  }
+
+  const [sales, expenseGroups, importedAdsResult, visitorResult] = await Promise.all([
+    prisma.sale.findMany({
+      where: saleWhere,
+      select: {
+        quantity: true,
+        totalAmount: true,
+        beksarDocId: true,
+        product: {
+          select: {
+            purchasePrice: true,
+          },
+        },
+      },
+    }),
+    prisma.expense.groupBy({
+      by: ['category'],
+      where: expenseWhere,
+      _sum: { amount: true },
+    }),
+    prisma.advertisingExpense.aggregate({
+      where: advertisingWhere,
+      _sum: { amount: true },
+    }),
+    prisma.visitor.aggregate({
+      where: visitorWhere,
+      _sum: { count: true, buyersCount: true },
+    }),
+  ]);
+
+  let revenue = 0;
+  let costOfGoods = 0;
+  const orders = new Set<string>();
+
+  for (const sale of sales) {
+    revenue += toNumber(sale.totalAmount);
+    costOfGoods += sale.quantity * toNumber(sale.product.purchasePrice);
+    orders.add(sale.beksarDocId);
+  }
+
+  let totalExpenses = 0;
+  let manualAdSpend = 0;
+  for (const group of expenseGroups) {
+    const amount = toNumber(group._sum.amount);
+    totalExpenses += amount;
+    if (group.category === 'target_ads') {
+      manualAdSpend += amount;
+    }
+  }
+
+  const importedAdSpend = toNumber(importedAdsResult._sum.amount);
+  const adSpend = manualAdSpend + importedAdSpend;
+  const grossProfit = revenue - costOfGoods;
+  const netProfit = grossProfit - totalExpenses - importedAdSpend;
+  const visitors = visitorResult._sum.count || 0;
+  const buyers = visitorResult._sum.buyersCount || 0;
+
+  return {
+    revenue,
+    grossProfit,
+    costOfGoods,
+    netProfit,
+    avgCheck: orders.size === 0 ? 0 : revenue / orders.size,
+    margin: revenue === 0 ? 0 : (grossProfit / revenue) * 100,
+    adSpend,
+    cac: buyers === 0 ? 0 : adSpend / buyers,
+    adROI: adSpend === 0 ? 0 : (revenue - adSpend) / adSpend,
+    drr: revenue === 0 ? 0 : (adSpend / revenue) * 100,
+    visitors,
+    buyers,
+    conversion: visitors === 0 ? 0 : (buyers / visitors) * 100,
+  };
+}
+
 export async function getGrossProfit(filter: DateFilter): Promise<number> {
   const revenue = await getRevenue(filter);
   const cogs = await getCostOfGoods(filter);
@@ -421,12 +515,17 @@ export async function getNoMovementProducts(filter: DateFilter, days: number = 3
     },
   });
 
-  return products.filter((p) => p._count.sales === 0).map((p) => ({
-    id: p.id,
-    name: p.name,
-    article: p.article,
-    brand: p.brand,
-  }));
+  const limit = Math.min(Number((filter as DateFilter & { limit?: number }).limit || 50), 500);
+
+  return products
+    .filter((p) => p._count.sales === 0)
+    .slice(0, limit)
+    .map((p) => ({
+      id: p.id,
+      name: p.name,
+      article: p.article,
+      brand: p.brand,
+    }));
 }
 
 export async function getLowStockProducts(filter: DateFilter, threshold: number = 5) {
@@ -445,6 +544,7 @@ export async function getLowStockProducts(filter: DateFilter, threshold: number 
       product: { select: { id: true, name: true, article: true, brand: true } },
     },
     orderBy: { quantity: 'asc' },
+    take: Math.min(Number((filter as DateFilter & { limit?: number }).limit || 50), 500),
   });
 
   return items.map((item) => ({
@@ -583,26 +683,19 @@ export async function getStoresComparison(filter: DateFilter) {
   const comparisons = await Promise.all(
     stores.map(async (store) => {
       const storeFilter = { ...filter, storeId: store.id };
-      const [revenue, grossProfit, netProfit, adSpend, visitors, buyers] = await Promise.all([
-        getRevenue(storeFilter),
-        getGrossProfit(storeFilter),
-        getNetProfit(storeFilter),
-        getAdSpend(storeFilter),
-        getTotalVisitors(storeFilter),
-        getTotalBuyers(storeFilter),
-      ]);
+      const metrics = await getFinancialMetrics(storeFilter);
 
       return {
         storeId: store.id,
         storeName: store.name,
-        revenue,
-        grossProfit,
-        netProfit,
-        adSpend,
-        visitors,
-        buyers,
-        conversion: visitors > 0 ? (buyers / visitors) * 100 : 0,
-        avgCheck: buyers > 0 ? revenue / buyers : 0,
+        revenue: metrics.revenue,
+        grossProfit: metrics.grossProfit,
+        netProfit: metrics.netProfit,
+        adSpend: metrics.adSpend,
+        visitors: metrics.visitors,
+        buyers: metrics.buyers,
+        conversion: metrics.conversion,
+        avgCheck: metrics.avgCheck,
       };
     })
   );

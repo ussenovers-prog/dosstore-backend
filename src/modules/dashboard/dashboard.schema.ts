@@ -5,6 +5,7 @@ export const dashboardQuerySchema = z.object({
   dateFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   dateTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   granularity: z.enum(['day', 'week', 'month']).default('day'),
+  limit: z.coerce.number().int().positive().max(500).optional(),
 });
 
 export const topProductsQuerySchema = z.object({

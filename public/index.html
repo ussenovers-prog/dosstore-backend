@@ -209,6 +209,7 @@ const api = {
   token: localStorage.getItem('accessToken'),
   refreshToken: localStorage.getItem('refreshToken'),
   user: JSON.parse(localStorage.getItem('user') || 'null'),
+  pendingGets: new Map(),
 
   setAuth(data) {
     this.token = data.tokens.accessToken;
@@ -223,6 +224,7 @@ const api = {
     this.token = null;
     this.refreshToken = null;
     this.user = null;
+    this.pendingGets.clear();
     localStorage.removeItem('accessToken');
     localStorage.removeItem('refreshToken');
     localStorage.removeItem('user');
@@ -268,7 +270,14 @@ const api = {
     }
   },
 
-  get(path) { return this.request('GET', path); },
+  get(path) {
+    const key = `${this.token || 'public'}:${path}`;
+    if (this.pendingGets.has(key)) return this.pendingGets.get(key);
+
+    const request = this.request('GET', path).finally(() => this.pendingGets.delete(key));
+    this.pendingGets.set(key, request);
+    return request;
+  },
   post(path, body) { return this.request('POST', path, body); },
   patch(path, body) { return this.request('PATCH', path, body); },
   delete(path) { return this.request('DELETE', path); },
@@ -369,6 +378,29 @@ function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, char => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[char]));
 }
 
+function pageSkeleton(label = 'Загрузка') {
+  return `
+    <div class="fade-in space-y-6" aria-busy="true">
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+        ${Array.from({length:8}, () => `
+          <div class="bg-surface-800 rounded-xl border border-surface-700 p-4">
+            <div class="h-3 w-20 bg-surface-700 rounded mb-3 animate-pulse"></div>
+            <div class="h-6 w-28 bg-surface-700 rounded animate-pulse"></div>
+          </div>
+        `).join('')}
+      </div>
+      <div class="bg-surface-800 rounded-xl border border-surface-700 p-4">
+        <div class="h-4 w-36 bg-surface-700 rounded mb-4 animate-pulse"></div>
+        <div class="h-52 bg-surface-700/70 rounded-lg animate-pulse flex items-center justify-center text-xs text-surface-200">${label}</div>
+      </div>
+    </div>
+  `;
+}
+
+function tableLoadingRow(colspan, label = 'Загрузка данных...') {
+  return `<tr><td colspan="${colspan}" class="px-3 py-6 text-center text-surface-200">${label}</td></tr>`;
+}
+
 // ============================================================
 // AUTH & ROUTING
 // ============================================================
@@ -448,8 +480,11 @@ function renderPage(page) {
   const el = document.getElementById('pageContent');
   Object.values(charts).forEach(c => c.destroy());
   charts = {};
+  el.innerHTML = pageSkeleton('Загрузка страницы...');
   const renderers = { dashboard: renderDashboard, sales: renderSales, inventory: renderInventory, expenses: renderExpenses, visitors: renderVisitors, abc: renderAbc, imports: renderImports, users: renderUsers, settings: renderSettings };
-  (renderers[page] || renderDashboard)(el);
+  Promise.resolve((renderers[page] || renderDashboard)(el)).catch((error) => {
+    el.innerHTML = `<div class="bg-surface-800 rounded-xl border border-surface-700 p-6 text-sm text-danger-400">${escapeHtml(error.message || 'Не удалось загрузить данные')}</div>`;
+  });
 }
 
 async function renderDashboard(el) {
@@ -492,6 +527,13 @@ async function renderDashboard(el) {
       </div>
     </div>
   `;
+  document.getElementById('kpiCards').innerHTML = Array.from({length:12}, () => `
+    <div class="kpi-card bg-surface-800 rounded-xl border border-surface-700 p-3 md:p-4">
+      <div class="h-3 w-24 bg-surface-700 rounded mb-3 animate-pulse"></div>
+      <div class="h-6 w-28 bg-surface-700 rounded animate-pulse"></div>
+    </div>
+  `).join('');
+  document.getElementById('dailyFinancialTable').innerHTML = tableLoadingRow(10);
 
   const f = getFilters();
   const [kpi, dailyFinancials, salesDyn, storesComp, expBreak, topProd] = await Promise.all([
@@ -729,8 +771,8 @@ async function renderInventory(el) {
   const [summary, turnover, lowStock, noMovement] = await Promise.all([
     api.get(`/dashboard/inventory-summary${f}`),
     api.get(`/dashboard/inventory-turnover${f}`),
-    api.get(`/dashboard/low-stock${f}`),
-    api.get(`/dashboard/no-movement-products${f}`),
+    api.get(`/dashboard/low-stock${appendQueryParam(f, 'limit', '50')}`),
+    api.get(`/dashboard/no-movement-products${appendQueryParam(f, 'limit', '50')}`),
   ]);
 
   const s = summary.data;

@@ -1,104 +1,72 @@
 import * as queries from './dashboard.queries.js';
 import { DashboardQueryInput, TopProductsQueryInput, AbcAnalysisQueryInput } from './dashboard.schema.js';
 import { NO_MOVEMENT_DAYS, LOW_STOCK_THRESHOLD } from '../../config/constants.js';
+import { withDashboardCache } from './dashboard.cache.js';
 
 class DashboardService {
   async getKPIs(query: DashboardQueryInput) {
-    const filter = {
-      storeId: query.storeId,
-      dateFrom: query.dateFrom,
-      dateTo: query.dateTo,
-    };
+    return withDashboardCache('kpi', query, async () => {
+      const filter = {
+        storeId: query.storeId,
+        dateFrom: query.dateFrom,
+        dateTo: query.dateTo,
+      };
 
-    const [
-      revenue,
-      grossProfit,
-      costOfGoods,
-      netProfit,
-      avgCheck,
-      margin,
-      adSpend,
-      cac,
-      adROI,
-      drr,
-      visitors,
-      buyers,
-      conversion,
-      inventorySummary,
-    ] = await Promise.all([
-      queries.getRevenue(filter),
-      queries.getGrossProfit(filter),
-      queries.getCostOfGoods(filter),
-      queries.getNetProfit(filter),
-      queries.getAvgCheck(filter),
-      queries.getMargin(filter),
-      queries.getAdSpend(filter),
-      queries.getCAC(filter),
-      queries.getAdROI(filter),
-      queries.getDRR(filter),
-      queries.getTotalVisitors(filter),
-      queries.getTotalBuyers(filter),
-      queries.getConversion(filter),
-      queries.getInventorySummary(filter),
-    ]);
+      const [metrics, inventorySummary] = await Promise.all([
+        queries.getFinancialMetrics(filter),
+        queries.getInventorySummary(filter),
+      ]);
 
-    return {
-      revenue,
-      grossProfit,
-      costOfGoods,
-      netProfit,
-      avgCheck,
-      margin,
-      adSpend,
-      cac,
-      adROI,
-      drr,
-      visitors,
-      buyers,
-      conversion,
-      inventoryValue: inventorySummary.totalValue,
-      inventoryItems: inventorySummary.totalItems,
-    };
+      return {
+        ...metrics,
+        inventoryValue: inventorySummary.totalValue,
+        inventoryItems: inventorySummary.totalItems,
+      };
+    });
   }
 
   async getSalesDynamic(query: DashboardQueryInput) {
-    return queries.getSalesDynamic(query);
+    return withDashboardCache('sales-dynamic', query, () => queries.getSalesDynamic(query));
   }
 
   async getDailyFinancials(query: DashboardQueryInput) {
-    return queries.getDailyFinancials(query);
+    return withDashboardCache('daily-financials', query, () => queries.getDailyFinancials(query));
   }
 
   async getStoresComparison(query: DashboardQueryInput) {
-    return queries.getStoresComparison(query);
+    return withDashboardCache('stores-comparison', query, () => queries.getStoresComparison(query));
   }
 
   async getTopProducts(query: TopProductsQueryInput) {
-    return queries.getTopProducts(query);
+    return withDashboardCache('top-products', query, () => queries.getTopProducts(query));
   }
 
   async getAbcAnalysis(query: AbcAnalysisQueryInput) {
-    return queries.getAbcAnalysis(query);
+    return withDashboardCache('abc-analysis', query, () => queries.getAbcAnalysis(query));
   }
 
   async getExpenseBreakdown(query: DashboardQueryInput) {
-    return queries.getExpenseBreakdown(query);
+    return withDashboardCache('expense-breakdown', query, () => queries.getExpenseBreakdown(query));
   }
 
   async getInventorySummary(query: DashboardQueryInput) {
-    return queries.getInventorySummary(query);
+    return withDashboardCache('inventory-summary', query, () => queries.getInventorySummary(query));
   }
 
   async getNoMovementProducts(query: DashboardQueryInput) {
-    return queries.getNoMovementProducts(query, NO_MOVEMENT_DAYS);
+    return withDashboardCache('no-movement-products', query, () =>
+      queries.getNoMovementProducts(query, NO_MOVEMENT_DAYS)
+    );
   }
 
   async getLowStockProducts(query: DashboardQueryInput) {
-    return queries.getLowStockProducts(query, LOW_STOCK_THRESHOLD);
+    return withDashboardCache('low-stock-products', query, () =>
+      queries.getLowStockProducts(query, LOW_STOCK_THRESHOLD)
+    );
   }
 
   async getInventoryTurnover(query: DashboardQueryInput) {
-    return queries.getInventoryTurnover(query);
+    return withDashboardCache('inventory-turnover', query, () => queries.getInventoryTurnover(query));
   }
 }
 

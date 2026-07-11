@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ers-group-v2';
+const CACHE_NAME = 'ers-group-v3-performance';
 const APP_SHELL = [
   '/',
   '/index.html',
