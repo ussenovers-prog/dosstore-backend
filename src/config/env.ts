@@ -18,6 +18,9 @@ const envSchema = z.object({
   // Server
   PORT: z.coerce.number().int().default(3001),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
+  PUBLIC_APP_URL: z.string().url().default('https://dosstore-backend.onrender.com'),
+  KEEP_ALIVE_ENABLED: z.string().default('true').transform((value) => value.toLowerCase() === 'true'),
+  KEEP_ALIVE_INTERVAL_MS: z.coerce.number().int().positive().default(600000),
 
   // FTP
   FTP_HOST: z.string().optional(),
