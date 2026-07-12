@@ -372,6 +372,8 @@ let lastTouchActionAt = 0;
 let usersCache = [];
 let usersFilterTimer = 0;
 let renderGeneration = 0;
+let lastAppliedFilterSignature = '';
+let filterRefreshTimer = 0;
 const pageTitles = { dashboard:'Dashboard', sales:'Продажи', inventory:'Остатки', expenses:'Расходы', visitors:'Посетители', abc:'ABC-анализ', imports:'Импорты', users:'Пользователи', settings:'Настройки' };
 
 function getFilters() {
@@ -383,6 +385,14 @@ function getFilters() {
   if (dateFrom) params.set('dateFrom', dateFrom);
   if (dateTo) params.set('dateTo', dateTo);
   return params.toString() ? `?${params.toString()}` : '';
+}
+
+function getFilterSignature() {
+  return [
+    document.getElementById('storeFilter')?.value || '',
+    document.getElementById('dateFrom')?.value || '',
+    document.getElementById('dateTo')?.value || '',
+  ].join('|');
 }
 
 function getSelectedDateRange() {
@@ -472,6 +482,19 @@ function pageSkeleton(label = 'Загрузка') {
 
 function tableLoadingRow(colspan, label = 'Загрузка данных...') {
   return `<tr><td colspan="${colspan}" class="px-3 py-6 text-center text-surface-200">${label}</td></tr>`;
+}
+
+function destroyCharts() {
+  Object.values(charts).forEach((chart) => {
+    if (chart && typeof chart.destroy === 'function') chart.destroy();
+  });
+  if (window.Chart?.getChart) {
+    document.querySelectorAll('canvas').forEach((canvas) => {
+      const chart = Chart.getChart(canvas);
+      if (chart) chart.destroy();
+    });
+  }
+  charts = {};
 }
 
 // ============================================================
@@ -628,8 +651,35 @@ function logout() {
   showLogin();
 }
 
-function onStoreFilterChange() { navigate(); }
-function onDateFilterChange() { navigate(); }
+function scheduleFilterRefresh() {
+  clearTimeout(filterRefreshTimer);
+  filterRefreshTimer = setTimeout(() => {
+    const nextSignature = getFilterSignature();
+    if (!nextSignature || nextSignature === lastAppliedFilterSignature) return;
+    lastAppliedFilterSignature = nextSignature;
+    navigate();
+  }, 120);
+}
+
+function onStoreFilterChange() { scheduleFilterRefresh(); }
+function onDateFilterChange() { scheduleFilterRefresh(); }
+
+function handleFilterControlEvent(event) {
+  if (!['storeFilter', 'dateFrom', 'dateTo'].includes(event.target?.id)) return;
+  scheduleFilterRefresh();
+}
+
+function startFilterValueWatcher() {
+  lastAppliedFilterSignature = getFilterSignature();
+  window.setInterval(() => {
+    const appVisible = !document.getElementById('appShell')?.classList.contains('hidden');
+    if (!appVisible) return;
+    const nextSignature = getFilterSignature();
+    if (nextSignature && nextSignature !== lastAppliedFilterSignature) {
+      scheduleFilterRefresh();
+    }
+  }, 350);
+}
 
 function initDateFilters() {
   const dateTo = document.getElementById('dateTo');
@@ -639,6 +689,7 @@ function initDateFilters() {
   const thirtyDaysAgo = new Date(today.getTime() - 30*86400000);
   if (!dateTo.value) dateTo.value = today.toISOString().split('T')[0];
   if (!dateFrom.value) dateFrom.value = thirtyDaysAgo.toISOString().split('T')[0];
+  lastAppliedFilterSignature = getFilterSignature();
 }
 
 // ============================================================
@@ -647,8 +698,7 @@ function initDateFilters() {
 function renderPage(page) {
   const el = document.getElementById('pageContent');
   const generation = ++renderGeneration;
-  Object.values(charts).forEach(c => c.destroy());
-  charts = {};
+  destroyCharts();
   el.innerHTML = pageSkeleton('Загрузка страницы...');
   const renderers = { dashboard: renderDashboard, sales: renderSales, inventory: renderInventory, expenses: renderExpenses, visitors: renderVisitors, abc: renderAbc, imports: renderImports, users: renderUsers, settings: renderSettings };
   Promise.resolve((renderers[page] || renderDashboard)(el, generation)).catch((error) => {
@@ -2249,6 +2299,9 @@ document.addEventListener('click', handleActionButton);
 document.addEventListener('touchend', handleSidebarLinkActivation, { passive: false });
 document.addEventListener('touchend', handleMobileMenuButton, { passive: false });
 document.addEventListener('touchend', handleActionButton, { passive: false });
+document.addEventListener('input', handleFilterControlEvent);
+document.addEventListener('change', handleFilterControlEvent);
+document.addEventListener('focusout', handleFilterControlEvent);
 document.addEventListener('input', handleUsersFilterInput);
 document.addEventListener('change', handleUsersFilterChange);
 window.addEventListener('hashchange', () => navigate());
@@ -2256,6 +2309,7 @@ window.addEventListener('popstate', () => navigate());
 
 // Set default date range before the first render, then show the right shell.
 initDateFilters();
+startFilterValueWatcher();
 if (api.token) { showApp(); } else { showLogin(); }
 </script>
 </body>

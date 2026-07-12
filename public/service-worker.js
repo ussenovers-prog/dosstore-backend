@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ers-group-v10-date-filters';
+const CACHE_NAME = 'ers-group-v11-date-filter-watcher';
 const APP_SHELL = [
   '/',
   '/index.html',
