@@ -431,7 +431,7 @@ export async function getConversion(filter: DateFilter): Promise<number> {
 // ============================================================
 
 export async function getInventorySummary(filter: DateFilter) {
-  const currentSnapshots = await getCurrentInventorySnapshots(filter.storeId);
+  const currentSnapshots = await getCurrentInventorySnapshots(filter.storeId, filter.dateTo);
 
   if (currentSnapshots.length === 0) {
     return {
@@ -530,7 +530,7 @@ export async function getNoMovementProducts(filter: DateFilter, days: number = 3
 }
 
 export async function getLowStockProducts(filter: DateFilter, threshold: number = 5) {
-  const currentSnapshots = await getCurrentInventorySnapshots(filter.storeId);
+  const currentSnapshots = await getCurrentInventorySnapshots(filter.storeId, filter.dateTo);
   if (currentSnapshots.length === 0) return [];
 
   const items = await prisma.inventory.findMany({
@@ -558,9 +558,11 @@ export async function getLowStockProducts(filter: DateFilter, threshold: number 
   }));
 }
 
-async function getCurrentInventorySnapshots(storeId?: number) {
+async function getCurrentInventorySnapshots(storeId?: number, dateTo?: string) {
   const where: Prisma.InventoryWhereInput = {};
   if (storeId) where.storeId = storeId;
+  const asOfFilter = buildDateFilter(undefined, dateTo);
+  if (asOfFilter) where.snapshotDate = asOfFilter;
 
   const snapshots = await prisma.inventory.groupBy({
     by: ['storeId', 'snapshotDate'],

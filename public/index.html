@@ -197,11 +197,11 @@ body { padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inse
         </label>
         <label class="block">
           <span class="block text-[10px] uppercase tracking-wide text-surface-200 mb-1">С даты</span>
-          <input type="date" id="dateFrom" class="input-dark text-xs px-3 py-2 md:py-1.5 rounded-lg" onchange="onDateFilterChange()">
+          <input type="date" id="dateFrom" class="input-dark text-xs px-3 py-2 md:py-1.5 rounded-lg" onchange="onDateFilterChange()" oninput="onDateFilterChange()">
         </label>
         <label class="block">
           <span class="block text-[10px] uppercase tracking-wide text-surface-200 mb-1">По дату</span>
-          <input type="date" id="dateTo" class="input-dark text-xs px-3 py-2 md:py-1.5 rounded-lg" onchange="onDateFilterChange()">
+          <input type="date" id="dateTo" class="input-dark text-xs px-3 py-2 md:py-1.5 rounded-lg" onchange="onDateFilterChange()" oninput="onDateFilterChange()">
         </label>
       </div>
     </header>
@@ -371,6 +371,7 @@ let lastTouchNavigationAt = 0;
 let lastTouchActionAt = 0;
 let usersCache = [];
 let usersFilterTimer = 0;
+let renderGeneration = 0;
 const pageTitles = { dashboard:'Dashboard', sales:'Продажи', inventory:'Остатки', expenses:'Расходы', visitors:'Посетители', abc:'ABC-анализ', imports:'Импорты', users:'Пользователи', settings:'Настройки' };
 
 function getFilters() {
@@ -382,6 +383,26 @@ function getFilters() {
   if (dateFrom) params.set('dateFrom', dateFrom);
   if (dateTo) params.set('dateTo', dateTo);
   return params.toString() ? `?${params.toString()}` : '';
+}
+
+function getSelectedDateRange() {
+  return {
+    dateFrom: document.getElementById('dateFrom')?.value || '',
+    dateTo: document.getElementById('dateTo')?.value || '',
+  };
+}
+
+function isDateInSelectedRange(value) {
+  const date = String(value || '').slice(0, 10);
+  if (!date) return false;
+  const { dateFrom, dateTo } = getSelectedDateRange();
+  if (dateFrom && date < dateFrom) return false;
+  if (dateTo && date > dateTo) return false;
+  return true;
+}
+
+function filterRowsBySelectedDate(rows, key = 'date') {
+  return (rows || []).filter((row) => isDateInSelectedRange(row?.[key]));
 }
 
 function appendQueryParam(query, key, value) {
@@ -625,16 +646,18 @@ function initDateFilters() {
 // ============================================================
 function renderPage(page) {
   const el = document.getElementById('pageContent');
+  const generation = ++renderGeneration;
   Object.values(charts).forEach(c => c.destroy());
   charts = {};
   el.innerHTML = pageSkeleton('Загрузка страницы...');
   const renderers = { dashboard: renderDashboard, sales: renderSales, inventory: renderInventory, expenses: renderExpenses, visitors: renderVisitors, abc: renderAbc, imports: renderImports, users: renderUsers, settings: renderSettings };
-  Promise.resolve((renderers[page] || renderDashboard)(el)).catch((error) => {
+  Promise.resolve((renderers[page] || renderDashboard)(el, generation)).catch((error) => {
+    if (generation !== renderGeneration) return;
     el.innerHTML = `<div class="bg-surface-800 rounded-xl border border-surface-700 p-6 text-sm text-danger-400">${escapeHtml(error.message || 'Не удалось загрузить данные')}</div>`;
   });
 }
 
-async function renderDashboard(el) {
+async function renderDashboard(el, generation = renderGeneration) {
   el.innerHTML = `
     <div class="fade-in">
       <div class="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-6" id="kpiCards"></div>
@@ -689,8 +712,9 @@ async function renderDashboard(el) {
     api.get(`/dashboard/sales-dynamic${f}`),
     api.get(`/dashboard/stores-comparison${f}`),
     api.get(`/dashboard/expense-breakdown${f}`),
-    api.get(`/dashboard/top-products${f}&limit=8`),
+    api.get(`/dashboard/top-products${appendQueryParam(f, 'limit', '8')}`),
   ]);
+  if (generation !== renderGeneration) return;
 
   const d = kpi.data;
   const kpis = [
@@ -718,7 +742,7 @@ async function renderDashboard(el) {
     </div>
   `).join('');
 
-  const daily = dailyFinancials.data || [];
+  const daily = filterRowsBySelectedDate(dailyFinancials.data || []);
   charts.dailyFinancial = new Chart(document.getElementById('dailyFinancialChart'), {
     type: 'line',
     data: {
@@ -749,7 +773,7 @@ async function renderDashboard(el) {
   `).join('') : '<tr><td colspan="10" class="px-3 py-6 text-center text-surface-200">Нет данных за период</td></tr>';
 
   // Sales dynamic chart
-  const salesData = salesDyn.data || [];
+  const salesData = filterRowsBySelectedDate(salesDyn.data || []);
   charts.sales = new Chart(document.getElementById('salesChart'), {
     type: 'line',
     data: {
@@ -797,7 +821,7 @@ async function renderDashboard(el) {
     options: { indexAxis:'y', responsive:true, plugins:{legend:{display:false}}, scales:{ x:{ticks:{color:'#64748b',callback:v=>fmt(v)}}, y:{ticks:{color:'#94a3b8'}} } }
   });
 }
-async function renderSales(el) {
+async function renderSales(el, generation = renderGeneration) {
   el.innerHTML = `<div class="fade-in">
     <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
       <div class="bg-surface-800 rounded-xl border border-surface-700 p-4">
@@ -827,12 +851,13 @@ async function renderSales(el) {
   const f = getFilters();
   const [salesDyn, topProd, storesComp] = await Promise.all([
     api.get(`/dashboard/sales-dynamic${f}`),
-    api.get(`/dashboard/top-products${f}&limit=15`),
+    api.get(`/dashboard/top-products${appendQueryParam(f, 'limit', '15')}`),
     api.get(`/dashboard/stores-comparison${f}`),
   ]);
+  if (generation !== renderGeneration) return;
 
   // Sales chart
-  const sd = salesDyn.data || [];
+  const sd = filterRowsBySelectedDate(salesDyn.data || []);
   charts.salesPage = new Chart(document.getElementById('salesPageChart'), {
     type:'line',
     data:{ labels:sd.map(s=>s.date.slice(5)), datasets:[{data:sd.map(s=>s.revenue),borderColor:'#38bdf8',backgroundColor:'rgba(56,189,248,0.1)',fill:true,tension:0.4,pointRadius:0}] },
@@ -862,7 +887,7 @@ async function renderSales(el) {
     </div>
   `).join('');
 }
-async function renderInventory(el) {
+async function renderInventory(el, generation = renderGeneration) {
   el.innerHTML = `<div class="fade-in">
     <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
       <div class="kpi-card bg-surface-800 rounded-xl border border-surface-700 p-4">
@@ -921,6 +946,7 @@ async function renderInventory(el) {
     api.get(`/dashboard/low-stock${appendQueryParam(f, 'limit', '50')}`),
     api.get(`/dashboard/no-movement-products${appendQueryParam(f, 'limit', '50')}`),
   ]);
+  if (generation !== renderGeneration) return;
 
   const s = summary.data;
   document.getElementById('invCost').textContent = fmtMoney(s.inventoryCost);
