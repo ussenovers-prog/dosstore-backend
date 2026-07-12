@@ -51,6 +51,7 @@ body { padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inse
 @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
 .btn-primary { background: linear-gradient(135deg, #0ea5e9, #0284c7); transition: all 0.15s ease; }
 .btn-primary:hover { background: linear-gradient(135deg, #38bdf8, #0ea5e9); box-shadow: 0 4px 15px rgba(14,165,233,0.3); }
+.btn-primary, button, select, input { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
 .input-dark { background: #1e293b; border: 1px solid #334155; color: #e2e8f0; transition: border-color 0.15s; }
 .input-dark:focus { border-color: #38bdf8; outline: none; box-shadow: 0 0 0 3px rgba(56,189,248,0.1); }
 .table-dark { border-collapse: separate; border-spacing: 0; }
@@ -65,6 +66,13 @@ body { padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inse
   #filterBar .store-filter-wrap { grid-column: span 2; }
   #filterBar label { min-width: 0; }
   #filterBar input, #filterBar select { width: 100%; min-width: 0; font-size: 16px; }
+  #modalContent { width: calc(100vw - 1.5rem); max-height: 86vh; }
+  .admin-action-grid { grid-template-columns: 1fr 1fr; }
+  .admin-filter-grid { grid-template-columns: 1fr; }
+}
+@media (min-width: 769px) {
+  .admin-action-grid { grid-template-columns: repeat(4, minmax(0, auto)); }
+  .admin-filter-grid { grid-template-columns: 2fr 1fr 1fr 1fr; }
 }
 </style>
 </head>
@@ -208,6 +216,7 @@ body { padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inse
 <div id="modalOverlay" class="hidden fixed inset-0 z-50 flex items-center justify-center mobile-overlay">
   <div id="modalContent" class="bg-surface-800 border border-surface-700 rounded-xl shadow-2xl w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto fade-in"></div>
 </div>
+<div id="toastContainer" class="fixed bottom-4 left-4 right-4 md:left-auto md:right-6 md:w-96 z-[60] space-y-2 pointer-events-none"></div>
 
 <script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script>
 // ============================================================
@@ -360,6 +369,8 @@ let currentPage = 'dashboard';
 let charts = {};
 let lastTouchNavigationAt = 0;
 let lastTouchActionAt = 0;
+let usersCache = [];
+let usersFilterTimer = 0;
 const pageTitles = { dashboard:'Dashboard', sales:'Продажи', inventory:'Остатки', expenses:'Расходы', visitors:'Посетители', abc:'ABC-анализ', imports:'Импорты', users:'Пользователи', settings:'Настройки' };
 
 function getFilters() {
@@ -399,6 +410,24 @@ function storeOptionsHtml(selectedStoreId = '') {
 }
 function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, char => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[char]));
+}
+
+function showToast(message, type = 'success') {
+  const container = document.getElementById('toastContainer');
+  if (!container) return;
+  const toast = document.createElement('div');
+  const styles = type === 'error'
+    ? 'bg-danger-500/95 border-danger-400 text-white'
+    : 'bg-success-500/95 border-success-400 text-surface-900';
+  toast.className = `${styles} pointer-events-auto border rounded-lg px-4 py-3 text-sm font-medium shadow-xl`;
+  toast.textContent = message;
+  container.appendChild(toast);
+  setTimeout(() => {
+    toast.style.opacity = '0';
+    toast.style.transform = 'translateY(8px)';
+    toast.style.transition = 'all 0.2s ease';
+  }, 2600);
+  setTimeout(() => toast.remove(), 3000);
 }
 
 function pageSkeleton(label = 'Загрузка') {
@@ -567,6 +596,10 @@ function handleActionButton(event) {
   if (action === 'close-modal') closeModal();
   if (action === 'open-expense-modal') openExpenseModal();
   if (action === 'open-user-modal') openUserModal();
+  if (action === 'edit-user') openUserModal('edit', Number(button.dataset.userId));
+  if (action === 'reset-user-password') openResetPasswordModal(Number(button.dataset.userId), button.dataset.userEmail || '');
+  if (action === 'toggle-user-active') toggleUserActive(Number(button.dataset.userId), button.dataset.nextActive === 'true');
+  if (action === 'delete-user') deleteUser(Number(button.dataset.userId), button.dataset.userName || '');
 }
 
 function logout() {
@@ -1746,17 +1779,64 @@ async function renderUsers(el) {
   }
 
   el.innerHTML = `<div class="fade-in">
-    <div class="flex items-center justify-between gap-3 mb-4">
-      <h3 class="text-sm font-semibold text-white">Управление пользователями</h3>
-      <button data-action="open-user-modal" onclick="openUserModal()" class="btn-primary px-4 py-2 rounded-lg text-white text-xs font-medium">+ Добавить</button>
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
+      <div>
+        <h3 class="text-lg font-semibold text-white">Управление пользователями</h3>
+        <p class="text-xs text-surface-200 mt-1">Создание сотрудников, доступы по магазинам и состояние аккаунтов.</p>
+      </div>
+      <button type="button" data-action="open-user-modal" class="btn-primary px-5 py-3 rounded-lg text-white text-sm font-semibold min-h-[44px]">+ Добавить</button>
+    </div>
+    <div class="bg-surface-800 rounded-xl border border-surface-700 p-4 mb-4">
+      <div class="grid admin-filter-grid gap-3">
+        <label class="block">
+          <span class="block text-xs text-surface-200 mb-1">Поиск</span>
+          <input id="userSearch" type="search" class="input-dark w-full px-3 py-3 rounded-lg text-base md:text-sm" placeholder="Имя или email">
+        </label>
+        <label class="block">
+          <span class="block text-xs text-surface-200 mb-1">Роль</span>
+          <select id="userRoleFilter" class="input-dark w-full px-3 py-3 rounded-lg text-base md:text-sm">
+            <option value="">Все роли</option>
+            <option value="owner">Owner</option>
+            <option value="employee">Employee</option>
+          </select>
+        </label>
+        <label class="block">
+          <span class="block text-xs text-surface-200 mb-1">Статус</span>
+          <select id="userStatusFilter" class="input-dark w-full px-3 py-3 rounded-lg text-base md:text-sm">
+            <option value="">Все</option>
+            <option value="true">Active</option>
+            <option value="false">Inactive</option>
+          </select>
+        </label>
+        <label class="block">
+          <span class="block text-xs text-surface-200 mb-1">Магазин</span>
+          <select id="userStoreFilter" class="input-dark w-full px-3 py-3 rounded-lg text-base md:text-sm">
+            <option value="">Все магазины</option>
+            <option value="2">Status</option>
+            <option value="1">Dosstore</option>
+          </select>
+        </label>
+      </div>
     </div>
     <div class="bg-surface-800 rounded-xl border border-surface-700 p-4">
-      <div class="overflow-x-auto">
-        <table class="table-dark w-full text-sm">
-          <thead><tr><th class="text-left px-3 py-2 text-xs text-surface-200 font-medium">Имя</th><th class="text-left px-3 py-2 text-xs text-surface-200 font-medium">Email</th><th class="text-left px-3 py-2 text-xs text-surface-200 font-medium">Роль</th><th class="text-left px-3 py-2 text-xs text-surface-200 font-medium">Магазин</th><th class="text-center px-3 py-2 text-xs text-surface-200 font-medium">Статус</th><th class="text-right px-3 py-2 text-xs text-surface-200 font-medium">Действия</th></tr></thead>
-          <tbody id="usersTable"></tbody>
+      <div class="overflow-x-auto rounded-lg border border-surface-700">
+        <table class="table-dark w-full text-sm min-w-[980px]">
+          <thead>
+            <tr>
+              <th class="text-left px-3 py-3 text-xs text-surface-200 font-medium">Name</th>
+              <th class="text-left px-3 py-3 text-xs text-surface-200 font-medium">Email</th>
+              <th class="text-left px-3 py-3 text-xs text-surface-200 font-medium">Role</th>
+              <th class="text-left px-3 py-3 text-xs text-surface-200 font-medium">Store</th>
+              <th class="text-left px-3 py-3 text-xs text-surface-200 font-medium">Status</th>
+              <th class="text-left px-3 py-3 text-xs text-surface-200 font-medium">Created date</th>
+              <th class="text-left px-3 py-3 text-xs text-surface-200 font-medium">Last login</th>
+              <th class="text-right px-3 py-3 text-xs text-surface-200 font-medium">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="usersTable">${tableLoadingRow(8)}</tbody>
         </table>
       </div>
+      <p id="usersMeta" class="text-xs text-surface-200 mt-3"></p>
     </div>
   </div>`;
 
@@ -1767,21 +1847,62 @@ async function loadUsersTable() {
   const usersTable = document.getElementById('usersTable');
   if (!usersTable) return;
 
-  const usersData = await api.get('/users');
-  const users = usersData.data || [];
+  usersTable.innerHTML = tableLoadingRow(8);
+  const params = new URLSearchParams({ limit: '500' });
+  const search = document.getElementById('userSearch')?.value?.trim();
+  const role = document.getElementById('userRoleFilter')?.value;
+  const status = document.getElementById('userStatusFilter')?.value;
+  const storeId = document.getElementById('userStoreFilter')?.value;
+  if (search) params.set('search', search);
+  if (role) params.set('role', role);
+  if (status) params.set('isActive', status);
+  if (storeId) params.set('storeId', storeId);
+
+  try {
+    const usersData = await api.get(`/users?${params.toString()}`);
+    const users = usersData.data || [];
+    usersCache = users;
+    const meta = document.getElementById('usersMeta');
+    if (meta) meta.textContent = `Найдено: ${usersData.meta?.total ?? users.length}`;
+
+    if (!users.length) {
+      usersTable.innerHTML = tableLoadingRow(8, 'Пользователи не найдены');
+      return;
+    }
+
   usersTable.innerHTML = users.map(u => `
     <tr>
-      <td class="px-3 py-2 text-white">${escapeHtml(u.fullName)}</td>
-      <td class="px-3 py-2 text-surface-200">${escapeHtml(u.email)}</td>
-      <td class="px-3 py-2"><span class="px-2 py-0.5 rounded-full text-xs ${u.role==='owner'?'bg-brand-500/10 text-brand-400':'bg-surface-700 text-surface-200'}">${u.role==='owner'?'Владелец':'Сотрудник'}</span></td>
-      <td class="px-3 py-2 text-surface-200">${escapeHtml(displayStoreName(u.store?.name))}</td>
-      <td class="px-3 py-2 text-center"><span class="px-2 py-0.5 rounded-full text-xs ${u.isActive?'bg-success-500/10 text-success-400':'bg-danger-500/10 text-danger-400'}">${u.isActive?'Активен':'Отключен'}</span></td>
-      <td class="px-3 py-2 text-right whitespace-nowrap">
-        <button onclick='openResetPasswordModal(${u.id}, ${JSON.stringify(u.email)})' class="text-brand-400 hover:text-brand-500 text-xs mr-3">Пароль</button>
-        ${u.id === api.user?.id ? '<span class="text-xs text-surface-200">Текущий</span>' : `<button onclick="toggleUserActive(${u.id}, ${!u.isActive})" class="${u.isActive ? 'text-danger-400 hover:text-danger-500' : 'text-success-400 hover:text-success-500'} text-xs">${u.isActive ? 'Отключить' : 'Включить'}</button>`}
+      <td class="px-3 py-3 text-white font-medium">${escapeHtml(u.fullName)}</td>
+      <td class="px-3 py-3 text-surface-200">${escapeHtml(u.email)}</td>
+      <td class="px-3 py-3"><span class="px-2 py-1 rounded-full text-xs ${u.role==='owner'?'bg-brand-500/10 text-brand-400':'bg-surface-700 text-surface-200'}">${u.role==='owner'?'Owner':'Employee'}</span></td>
+      <td class="px-3 py-3 text-surface-200">${u.storeId ? escapeHtml(displayStoreName(u.store?.name || displayStoreNameById(u.storeId))) : 'Все магазины'}</td>
+      <td class="px-3 py-3"><span class="px-2 py-1 rounded-full text-xs ${u.isActive?'bg-success-500/10 text-success-400':'bg-danger-500/10 text-danger-400'}">${u.isActive?'Active':'Inactive'}</span></td>
+      <td class="px-3 py-3 text-surface-200 whitespace-nowrap">${fmtDateTime(u.createdAt)}</td>
+      <td class="px-3 py-3 text-surface-200 whitespace-nowrap">${fmtDateTime(u.lastLoginAt)}</td>
+      <td class="px-3 py-3 text-right">
+        <div class="grid admin-action-grid gap-2 justify-end">
+          <button type="button" data-action="edit-user" data-user-id="${u.id}" class="px-3 py-2 rounded-lg bg-surface-700 text-white text-xs min-h-[38px]">Edit</button>
+          <button type="button" data-action="reset-user-password" data-user-id="${u.id}" data-user-email="${escapeHtml(u.email)}" class="px-3 py-2 rounded-lg bg-brand-500/10 text-brand-400 text-xs min-h-[38px]">Reset password</button>
+          ${u.id === api.user?.id ? '<span class="px-3 py-2 rounded-lg bg-surface-700/50 text-surface-200 text-xs text-center min-h-[38px]">Protected</span>' : `<button type="button" data-action="toggle-user-active" data-user-id="${u.id}" data-next-active="${!u.isActive}" class="px-3 py-2 rounded-lg ${u.isActive ? 'bg-danger-500/10 text-danger-400' : 'bg-success-500/10 text-success-400'} text-xs min-h-[38px]">${u.isActive ? 'Deactivate' : 'Activate'}</button>`}
+          ${u.id === api.user?.id ? '<span class="px-3 py-2 rounded-lg bg-surface-700/50 text-surface-200 text-xs text-center min-h-[38px]">No delete</span>' : `<button type="button" data-action="delete-user" data-user-id="${u.id}" data-user-name="${escapeHtml(u.fullName)}" class="px-3 py-2 rounded-lg bg-danger-500/10 text-danger-400 text-xs min-h-[38px]">Delete</button>`}
+        </div>
       </td>
     </tr>
   `).join('');
+  } catch (error) {
+    usersTable.innerHTML = tableLoadingRow(8, error.message || 'Не удалось загрузить пользователей');
+  }
+}
+
+function handleUsersFilterInput(event) {
+  if (!['userSearch'].includes(event.target?.id)) return;
+  clearTimeout(usersFilterTimer);
+  usersFilterTimer = setTimeout(() => loadUsersTable(), 250);
+}
+
+function handleUsersFilterChange(event) {
+  if (!['userRoleFilter', 'userStatusFilter', 'userStoreFilter'].includes(event.target?.id)) return;
+  loadUsersTable();
 }
 
 async function renderSettings(el) {
@@ -1820,7 +1941,7 @@ async function renderSettings(el) {
     <div class="bg-surface-800 rounded-xl border border-surface-700 p-6 mb-6">
       <h3 class="text-sm font-semibold text-white mb-4">Пользователи</h3>
       <div class="flex justify-end mb-3">
-        <button data-action="open-user-modal" onclick="openUserModal()" class="btn-primary px-4 py-2 rounded-lg text-white text-xs font-medium">+ Добавить</button>
+        <button type="button" data-action="open-user-modal" class="btn-primary px-4 py-2 rounded-lg text-white text-xs font-medium">+ Добавить</button>
       </div>
       <div class="overflow-x-auto">
         <table class="table-dark w-full text-sm">
@@ -1898,42 +2019,80 @@ async function renderSettings(el) {
   `).join('');
 }
 
-function openUserModal() {
+function openUserModal(mode = 'create', userId = null) {
+  const isEdit = mode === 'edit';
+  const user = isEdit ? usersCache.find((item) => item.id === userId) : null;
+  if (isEdit && !user) {
+    showToast('Пользователь не найден в таблице', 'error');
+    return;
+  }
+  const selectedRole = user?.role || 'employee';
+  const selectedStoreId = user?.storeId || '';
+  const selectedActive = user?.isActive !== false;
   openModal(`
-    <div class="p-6">
-      <h3 class="text-lg font-bold text-white mb-4">Добавить пользователя</h3>
+    <div class="p-5 md:p-6">
+      <h3 class="text-lg font-bold text-white mb-1">${isEdit ? 'Редактировать пользователя' : 'Добавить пользователя'}</h3>
+      <p class="text-xs text-surface-200 mb-4">${isEdit ? escapeHtml(user.email) : 'Новый аккаунт для владельца или сотрудника.'}</p>
       <form id="userForm" class="space-y-3">
         <div><label class="block text-xs text-surface-200 mb-1">Имя</label>
-          <input type="text" id="newUserName" class="input-dark w-full px-3 py-2 rounded-lg text-sm" required></div>
+          <input type="text" id="newUserName" class="input-dark w-full px-3 py-3 rounded-lg text-base md:text-sm" value="${escapeHtml(user?.fullName || '')}" required></div>
         <div><label class="block text-xs text-surface-200 mb-1">Email</label>
-          <input type="email" id="newUserEmail" class="input-dark w-full px-3 py-2 rounded-lg text-sm" required></div>
-        <div><label class="block text-xs text-surface-200 mb-1">Пароль</label>
-          <input type="password" id="newUserPass" class="input-dark w-full px-3 py-2 rounded-lg text-sm" min="6" required></div>
+          <input type="email" id="newUserEmail" class="input-dark w-full px-3 py-3 rounded-lg text-base md:text-sm ${isEdit ? 'opacity-70' : ''}" value="${escapeHtml(user?.email || '')}" ${isEdit ? 'disabled' : 'required'}></div>
+        ${isEdit ? '' : `<div><label class="block text-xs text-surface-200 mb-1">Пароль</label>
+          <input type="password" id="newUserPass" class="input-dark w-full px-3 py-3 rounded-lg text-base md:text-sm" minlength="6" required></div>`}
         <div><label class="block text-xs text-surface-200 mb-1">Роль</label>
-          <select id="newUserRole" class="input-dark w-full px-3 py-2 rounded-lg text-sm"><option value="employee">Сотрудник</option><option value="owner">Владелец</option></select></div>
+          <select id="newUserRole" class="input-dark w-full px-3 py-3 rounded-lg text-base md:text-sm">
+            <option value="employee" ${selectedRole === 'employee' ? 'selected' : ''}>Employee</option>
+            <option value="owner" ${selectedRole === 'owner' ? 'selected' : ''}>Owner</option>
+          </select></div>
         <div><label class="block text-xs text-surface-200 mb-1">Магазин</label>
-          <select id="newUserStore" class="input-dark w-full px-3 py-2 rounded-lg text-sm"><option value="">Не назначен</option><option value="1">Dosstore</option><option value="2">Status</option></select></div>
-        <div class="flex gap-2 pt-2">
-          <button type="submit" class="btn-primary flex-1 py-2 rounded-lg text-white text-sm font-medium">Создать</button>
-          <button type="button" data-action="close-modal" onclick="closeModal()" class="flex-1 py-2 rounded-lg text-surface-200 bg-surface-700 text-sm">Отмена</button>
+          <select id="newUserStore" class="input-dark w-full px-3 py-3 rounded-lg text-base md:text-sm">
+            <option value="" ${!selectedStoreId ? 'selected' : ''}>Все магазины / Owner</option>
+            <option value="2" ${String(selectedStoreId) === '2' ? 'selected' : ''}>Status</option>
+            <option value="1" ${String(selectedStoreId) === '1' ? 'selected' : ''}>Dosstore</option>
+          </select></div>
+        <div><label class="block text-xs text-surface-200 mb-1">Статус</label>
+          <select id="newUserActive" class="input-dark w-full px-3 py-3 rounded-lg text-base md:text-sm">
+            <option value="true" ${selectedActive ? 'selected' : ''}>Active</option>
+            <option value="false" ${!selectedActive ? 'selected' : ''}>Inactive</option>
+          </select></div>
+        <div class="flex flex-col sm:flex-row gap-2 pt-2">
+          <button type="submit" class="btn-primary flex-1 py-3 rounded-lg text-white text-sm font-semibold min-h-[44px]">${isEdit ? 'Сохранить' : 'Создать'}</button>
+          <button type="button" data-action="close-modal" class="flex-1 py-3 rounded-lg text-surface-200 bg-surface-700 text-sm min-h-[44px]">Отмена</button>
         </div>
       </form>
     </div>
   `);
   document.getElementById('userForm').addEventListener('submit', async (e) => {
     e.preventDefault();
-    await api.post('/users', {
+    const role = document.getElementById('newUserRole').value;
+    const storeValue = document.getElementById('newUserStore').value;
+    const payload = {
       fullName: document.getElementById('newUserName').value,
-      email: document.getElementById('newUserEmail').value,
-      password: document.getElementById('newUserPass').value,
-      role: document.getElementById('newUserRole').value,
-      storeId: document.getElementById('newUserStore').value ? parseInt(document.getElementById('newUserStore').value) : null,
-    });
-    closeModal();
-    if (currentPage === 'users') {
-      renderUsers(document.getElementById('pageContent'));
-    } else {
-      renderSettings(document.getElementById('pageContent'));
+      role,
+      storeId: storeValue ? parseInt(storeValue) : null,
+      isActive: document.getElementById('newUserActive').value === 'true',
+    };
+    if (!isEdit) {
+      payload.email = document.getElementById('newUserEmail').value;
+      payload.password = document.getElementById('newUserPass').value;
+    }
+    try {
+      if (isEdit) {
+        await api.patch(`/users/${userId}`, payload);
+        showToast('Пользователь обновлен');
+      } else {
+        await api.post('/users', payload);
+        showToast('Пользователь создан');
+      }
+      closeModal();
+      if (currentPage === 'users') {
+        await loadUsersTable();
+      } else {
+        renderSettings(document.getElementById('pageContent'));
+      }
+    } catch (error) {
+      showToast(error.message || 'Не удалось сохранить пользователя', 'error');
     }
   });
 }
@@ -1947,8 +2106,8 @@ function openResetPasswordModal(userId, email) {
         <div><label class="block text-xs text-surface-200 mb-1">Новый пароль</label>
           <input type="password" id="resetPasswordValue" class="input-dark w-full px-3 py-2 rounded-lg text-sm" minlength="6" required></div>
         <div class="flex gap-2 pt-2">
-          <button type="submit" class="btn-primary flex-1 py-2 rounded-lg text-white text-sm font-medium">Сохранить</button>
-          <button type="button" onclick="closeModal()" class="flex-1 py-2 rounded-lg text-surface-200 bg-surface-700 text-sm">Отмена</button>
+          <button type="submit" class="btn-primary flex-1 py-3 rounded-lg text-white text-sm font-medium min-h-[44px]">Сохранить</button>
+          <button type="button" data-action="close-modal" class="flex-1 py-3 rounded-lg text-surface-200 bg-surface-700 text-sm min-h-[44px]">Отмена</button>
         </div>
       </form>
     </div>
@@ -1959,13 +2118,35 @@ function openResetPasswordModal(userId, email) {
       password: document.getElementById('resetPasswordValue').value,
     });
     closeModal();
-    renderUsers(document.getElementById('pageContent'));
+    showToast('Пароль обновлен');
+    await loadUsersTable();
   });
 }
 
 async function toggleUserActive(userId, isActive) {
-  await api.patch(`/users/${userId}`, { isActive });
-  await loadUsersTable();
+  try {
+    await api.patch(`/users/${userId}`, { isActive });
+    showToast(isActive ? 'Пользователь активирован' : 'Пользователь отключен');
+    await loadUsersTable();
+  } catch (error) {
+    showToast(error.message || 'Не удалось изменить статус', 'error');
+  }
+}
+
+async function deleteUser(userId, userName) {
+  if (userId === api.user?.id) {
+    showToast('Текущий owner защищен от удаления', 'error');
+    return;
+  }
+  const label = userName ? `"${userName}"` : 'этого пользователя';
+  if (!window.confirm(`Удалить ${label}? Аккаунт будет отключен.`)) return;
+  try {
+    await api.delete(`/users/${userId}`);
+    showToast('Пользователь удален из активного доступа');
+    await loadUsersTable();
+  } catch (error) {
+    showToast(error.message || 'Не удалось удалить пользователя', 'error');
+  }
 }
 
 // ============================================================
@@ -1982,6 +2163,7 @@ function closeModal() {
 Object.assign(window, {
   closeModal,
   deleteExpense,
+  deleteUser,
   deleteVisitor,
   loadSystemHealth,
   logout,
@@ -2041,6 +2223,8 @@ document.addEventListener('click', handleActionButton);
 document.addEventListener('touchend', handleSidebarLinkActivation, { passive: false });
 document.addEventListener('touchend', handleMobileMenuButton, { passive: false });
 document.addEventListener('touchend', handleActionButton, { passive: false });
+document.addEventListener('input', handleUsersFilterInput);
+document.addEventListener('change', handleUsersFilterChange);
 window.addEventListener('hashchange', () => navigate());
 window.addEventListener('popstate', () => navigate());
 

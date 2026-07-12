@@ -6,13 +6,19 @@ import { withNestedDisplayStoreName } from '../../utils/storeDisplay.js';
 
 class UsersService {
   async list(query: UserQueryInput) {
-    const { page, limit, role, storeId, isActive } = query;
+    const { page, limit, role, storeId, isActive, search } = query;
     const skip = (page - 1) * limit;
 
     const where: any = {};
     if (role) where.role = role;
     if (storeId) where.storeId = storeId;
     if (isActive !== undefined) where.isActive = isActive;
+    if (search) {
+      where.OR = [
+        { fullName: { contains: search, mode: 'insensitive' } },
+        { email: { contains: search, mode: 'insensitive' } },
+      ];
+    }
 
     const [users, total] = await Promise.all([
       prisma.user.findMany({
@@ -27,6 +33,7 @@ class UsersService {
           role: true,
           storeId: true,
           isActive: true,
+          lastLoginAt: true,
           createdAt: true,
           store: { select: { id: true, name: true } },
         },
@@ -50,6 +57,7 @@ class UsersService {
         role: true,
         storeId: true,
         isActive: true,
+        lastLoginAt: true,
         createdAt: true,
         store: { select: { id: true, name: true } },
       },
@@ -80,6 +88,7 @@ class UsersService {
         fullName: input.fullName,
         role: input.role,
         storeId: input.storeId,
+        isActive: input.isActive,
       },
       select: {
         id: true,
@@ -88,11 +97,13 @@ class UsersService {
         role: true,
         storeId: true,
         isActive: true,
+        lastLoginAt: true,
         createdAt: true,
+        store: { select: { id: true, name: true } },
       },
     });
 
-    return user;
+    return withNestedDisplayStoreName(user);
   }
 
   async update(id: number, input: UpdateUserInput) {
@@ -125,11 +136,13 @@ class UsersService {
         role: true,
         storeId: true,
         isActive: true,
+        lastLoginAt: true,
         createdAt: true,
+        store: { select: { id: true, name: true } },
       },
     });
 
-    return updated;
+    return withNestedDisplayStoreName(updated);
   }
 
   async deactivate(id: number) {
@@ -162,11 +175,13 @@ class UsersService {
         role: true,
         storeId: true,
         isActive: true,
+        lastLoginAt: true,
         updatedAt: true,
+        store: { select: { id: true, name: true } },
       },
     });
 
-    return updated;
+    return withNestedDisplayStoreName(updated);
   }
 
   private async assertAnotherActiveOwner(userId: number) {

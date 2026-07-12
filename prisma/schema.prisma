@@ -51,6 +51,7 @@ model User {
   role         String   @default("employee") // owner | employee
   storeId      Int?
   isActive     Boolean  @default(true)
+  lastLoginAt  DateTime?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 

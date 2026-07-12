@@ -5,7 +5,8 @@ export const createUserSchema = z.object({
   password: z.string().min(6, 'Password must be at least 6 characters'),
   fullName: z.string().min(2, 'Full name is required'),
   role: z.enum(['owner', 'employee']).default('employee'),
-  storeId: z.number().int().positive().optional(),
+  storeId: z.number().int().positive().nullable().optional(),
+  isActive: z.boolean().optional().default(true),
 });
 
 export const updateUserSchema = z.object({
@@ -24,7 +25,8 @@ export const userQuerySchema = z.object({
   limit: z.coerce.number().int().positive().max(500).default(50),
   role: z.enum(['owner', 'employee']).optional(),
   storeId: z.coerce.number().int().positive().optional(),
-  isActive: z.coerce.boolean().optional(),
+  isActive: z.enum(['true', 'false']).transform((value) => value === 'true').optional(),
+  search: z.string().trim().optional(),
 });
 
 export type CreateUserInput = z.infer<typeof createUserSchema>;
