@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ers-group-v8-users-admin';
+const CACHE_NAME = 'ers-group-v9-users-admin-login';
 const APP_SHELL = [
   '/',
   '/index.html',
