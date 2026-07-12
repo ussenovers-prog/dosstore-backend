@@ -100,15 +100,20 @@ class AuthService {
       throw new AppError('Invalid credentials', 401, 'INVALID_CREDENTIALS');
     }
 
-    const tokens = this.generateTokens(user);
+    const loggedInUser = await prisma.user.update({
+      where: { id: user.id },
+      data: { lastLoginAt: new Date() },
+    });
+
+    const tokens = this.generateTokens(loggedInUser);
 
     return {
       user: {
-        id: user.id,
-        email: user.email,
-        fullName: user.fullName,
-        role: user.role,
-        storeId: user.storeId,
+        id: loggedInUser.id,
+        email: loggedInUser.email,
+        fullName: loggedInUser.fullName,
+        role: loggedInUser.role,
+        storeId: loggedInUser.storeId,
       },
       tokens,
     };
